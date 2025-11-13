@@ -99,9 +99,9 @@ model.CpGC = Constraint(rule=CpGC_rule)
 # (4) def the various functions in Hurekkikar group contributions
 def link_properties_rule(model, X):
     if X == 'Tm':
-        return model.Tm == exp(model.fX[X]/model.Tm0)
+        return model.Tm == log(model.fX[X])*model.Tm0
     elif X == 'Tb':
-        return model.Tb == exp(model.fX[X]/model.Tb0)
+        return model.Tb == log(model.fX[X])*model.Tb0
     elif X == 'molarvol':
         return model.molarvol == model.fX[X]+model.Vm0
     elif X in ['sol1', 'sol2', 'sol3']:
