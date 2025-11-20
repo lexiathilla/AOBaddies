@@ -3,12 +3,24 @@ import math
 import matplotlib.pyplot as plt
 model = ConcreteModel('APOProject')
 
+#max number of groups per elements
+ni_max=8
+ng_max=10
+
 #Define SETS
 model.g=Set(initialize=['CH3', 'CH2','CH','C','CHdouble','Cdouble','Cdouble','NH2','NH','N','Ndouble','OH','O','Odouble'])#groups for GC Cp
 model.i=Set(initialize=['CH3','CH2','CH','C','CH2doubleCH','CHdoubleCH','CH2doubleC'])#First order groups for GC - need to choose from large variety - litterature backed ?
 model.A=Set(initialize=['Cp'])
 model.X=Set(initialize=['Tm','Tb','molarvol','sol1','sol2','sol3']) #The parameters calculated from MG method - might actually just be f(X) or not could put different constraints definition for some X 
 model.B=Set(initialize=['acyclic','monocyclic','bicyclic'])
+
+#Ki={i: math.ceil(math.log2(ni)) for i in model.i}  could create ngs and nis for each g and i btw
+#Kg={g: math.ceil(math.log2(ng)) for g in model.g}
+Ki = math.ceil(math.log2(ni_max))
+Kg = math.ceil(math.log2(ng_max))
+# Create index sets
+model.Ki = Set(1, Ki)
+model.Kg = Set(1, Kg)
 
 #Define Parameters GC, ideally for each grp considered and each property (i,X)
 i_data={('CH3', 'Tm'): 1, ('CH2', 'Tm'): 2, ('CH', 'Tm'): 2, ('C', 'Tm'): 1, ('CH2doubleCH', 'Tm'): 1,('CHdoubleCH', 'Tm'): 1,('CH2doubleC', 'Tm'): 1
@@ -26,7 +38,8 @@ model.cg=Param(model.g, model.A, initialize=g_data, default=0)
 #valency data (defined for i for now)
 v_i={'CH3':1, 'CH2':2, 'CH':3, 'C':4, 'CH2doubleCH':1, 'CHdoubleCH':3, 'CH2doubleC':2}
 model.vi=Param(model.i, initialize=v_i, default=0)
-
+v_g={}
+model.vg=Param(model.i, initialize=v_g, default=0)
 #group types : 1=general, 2=unsaturated, 3=aromatic; probably wrong way to do it 
 type_data={'CH3':1, 'CH2':1, 'CH':1, 'C':1, 'CH2doubleCH':2, 'CHdoubleCH':2, 'CH2doubleC':2}
 model.grouptype = Param(model.i, initialize=type_data, default=0)
@@ -51,12 +64,15 @@ model.sol2=Var(within=NonNegativeReals, bounds=(0.0001, None)) #in K
 model.sol3=Var(within=NonNegativeReals, bounds=(0.0001, None)) #in K
 model.molarvol=Var(within=NonNegativeReals, bounds=(0.0001, None)) #in K
 
+#Set of binary variables (we'll later define integar cuts to get rid of some solutions, also the variables are defined through linear expressions below)
+model.yi = Var(model.i, model.Ki, within=Binary)
+model.yg = Var(model.g, model.Kg, within=Binary)
 #Binary molecule types
-model.yb=Var(model.B, within=Binary)
+model.yb=Var(model.B, within=Binary) #binary molecule types defined later
 model.m=Var(within=Reals)
-#Integer count (to be replaced with binary variables)
-model.ni=Var(model.i, within=NonNegativeInteger)#!!! watch w the integer cuts thing might have to def ni=sumk=0 to k 2^kyik (continuous associated with a set of binary variables)
-model.ng = Var(model.g, within=NonNegativeInteger)
+#Integer counts (calculated with binary variables)
+model.ni=Var(model.i, within=NonNegativeReals)#!!! watch w the integer cuts thing might have to def ni=sumk=0 to k 2^kyik (continuous associated with a set of binary variables)
+model.ng = Var(model.g, within=NonNegativeReals)
 
 model.Cp = Var(within=NonNegativeReals)
 model.fX = Var(model.X, within=NonNegativeReals)  # property results (Tm, Tb, etc.)
@@ -124,7 +140,6 @@ def RED_def_rule(model):
     ) / model.R0
 model.RED_def = Constraint(rule=RED_def_rule)
 
-
 #(7) Allowing only one type of molecule
 def one_type(model):
     return sum (model.yb[b] for b in model.B) ==1
@@ -135,12 +150,25 @@ def m_rule(model):
     return model.m == model.yb['acyclic'] - model.yb['bicyclic']
 model.m_rule = Constraint(rule=m_rule)
 
-#(9) Indicator variables to numbers of group
-#Octet rule
-def rho_def_rule(model):
-    return model.rho == 1 / model.molarvol
-model.rho_def = Constraint(rule=rho_def_rule)
-#
+#(9) Replacing integer variables with linear expressions : i 
+def ni_rule(model,i):
+    return model.ni[i] == sum(2**(k-1)*model.yi[i,k] for k in model.Ki)
+model.ni_rule = Constraint(rule=ni_rule)
+
+#(10) Replacing integer variables with linear expressions : g
+def ng_rule(model,g):
+    return model.ng[g] == sum(2**(k-1)*model.yg[g,k] for k in model.Kg)
+model.ng_rule = Constraint(rule=ng_rule)
+
+#(11) Octet Rule, i compounds
+def vi_rule(model):
+    return 2*model.m==sum((2-model.vi[i])*model.ni[i] for i in model.i)
+model.vi_rule = Constraint(rule=vi_rule)
+
+#(12) Octet Rule, g compounds
+def vg_rule(model):
+    return 2*model.m==sum((2-model.vg[g])*model.ng[g] for g in model.g)
+model.vg_rule = Constraint(rule=vg_rule)
 
 #Normalized expressions using tanh(kx)
 model.rho_norm = Expression(expr=tanh( model.rho * model.k_rho))##maybe not we want the larger it is the smaller it is so could put a sorth of inverse there instead of w the weights
