@@ -3,6 +3,9 @@ import math
 import matplotlib.pyplot as plt
 model = ConcreteModel('APOProject')
 
+"""
+yadayada"""
+
 #Define SETS
 model.g=Set(initialize=['CH3', 'CH2','CH','C','CHdouble','Cdouble','Cdouble','NH2','NH','N','Ndouble','OH','O','Odouble'])#groups for GC Cp
 model.i=Set(initialize=['CH3','CH2','CH','C','CH2doubleCH','CHdoubleCH','CH2doubleC'])#First order groups for GC - need to choose from large variety - litterature backed ?
