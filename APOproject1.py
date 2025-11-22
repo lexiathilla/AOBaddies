@@ -7,9 +7,18 @@ model = ConcreteModel('APOProject')
 yadayada"""
 
 #Define SETS
-model.g=Set(initialize=['CH3', 'CH2','CH','C','CHdouble','Cdouble','Cdouble','NH2','NH','N','Ndouble','OH','O','Odouble'])#groups for GC Cp
-model.i=Set(initialize=['CH3','CH2','CH','C','CH2doubleCH','CHdoubleCH','CH2doubleC'])#First order groups for GC - need to choose from large variety - litterature backed ?
-model.A=Set(initialize=['Cp'])
+#groups for GC Cp -- from Sahinidis method, which uses Joback & Reid groups
+    #only need to include what's needed to build chosen i groups
+model.g=Set(initialize=['CH3', 'CH2','CH','C','CH2d','CHd','Cd','Cdd','CHt','Ct',               #Non-ring increments
+                        'CH2r', 'CHr', 'Cr', 'CHdr', 'Cdr',                                     #Ring increments
+                        'F', 'Cl', 'Br', 'I',                                                   #Halogen increments 
+                        'OHalc', 'OHphe', 'O', 'Or', 'CO', 'COr', 'OCH', 'COOH', 'COO', 'Od',   #Oxygen increments (ring and non-ring)
+                        'NH2','NH', 'NHr', 'N', 'Nd', 'Ndr', 'NHd', 'CN', 'NO2',                #Nitrogen increments
+                        'SH', 'S', 'Sr'])                                                       #Sulfur increments
+model.A=Set(initialize=['Cp']) #Calculated from Sahinidis
+
+#First order groups for GC from Hukkerikar - need to finalise selection
+model.i=Set(initialize=['CH3','CH2','CH','C','CH2doubleCH','CHdoubleCH','CH2doubleC', 'CHdoubleC', 'CdoubleC', 'CH2doubleCdoubleCH'])#...
 model.X=Set(initialize=['Tm','Tb','molarvol','sol1','sol2','sol3']) #The parameters calculated from MG method - might actually just be f(X) or not could put different constraints definition for some X 
 model.B=Set(initialize=['acyclic','monocyclic','bicyclic'])
 
@@ -23,7 +32,17 @@ i_data={('CH3', 'Tm'): 1, ('CH2', 'Tm'): 2, ('CH', 'Tm'): 2, ('C', 'Tm'): 1, ('C
 model.ci=Param(model.i, model.X, initialize=i_data, default=0)
 
 #for Cp
-g_data={('CH3', 'Cp'): 1, ('CH2', 'Cp'): 2, ('CH', 'Cp'): 2, ('C', 'Cp'): 1, ('CHdouble', 'Cp'): 1,('Cdouble', 'Cp'): 1,('NH2', 'Cp'): 1,('NH', 'Cp'): 1,('N', 'Cp'): 1,('Ndouble', 'Cp'): 1,('OH', 'Cp'): 1,('O', 'Cp'): 1,('Odouble', 'Cp'): 1 }
+#Have only defined for non-ring increments to test - require Pci, Tci, Tbi, Cp0i(a,b,c,d) for each group
+#Unsure if Pci, Tci, Tbi compatible with Hukkerikar values? May not need to define twice 
+g_data={('CH3', 'Tci'):0.0141, ('CH2', 'Tci'):0.0189, ('CH', 'Tci'):0.0164, ('C', 'Tci'):0.0067, ('CH2d', 'Tci'):0.0113, ('CHd', 'Tci'):0.0129, ('Cd', 'Tci'):0.0117, ('Cdd', 'Tci'):0.0026, ('CHt', 'Tci'):0.0027, ('Ct', 'Tci'):0.0020,
+        ('CH3', 'Tbi'):23.58, ('CH2', 'Tbi'):22.88, ('CH', 'Tbi'):21.74, ('C', 'Tbi'):18.25, ('CH2d', 'Tbi'):18.18, ('CHd', 'Tbi'):24.96, ('Cd', 'Tbi'):24.14, ('Cdd', 'Tbi'):26.15, ('CHt', 'Tbi'):9.20, ('Ct', 'Tbi'):27.38,
+        ('CH3', 'Pci'):-0.0012, ('CH2', 'Pci'):0, ('CH', 'Pci'):0.0020 ('C', 'Pci'):0.0043, ('CH2d', 'Pci'):-0.0028, ('CHd', 'Pci'):-0.0006, ('Cd', 'Pci'):0.0011, ('Cdd', 'Pci'):0.0028, ('CHt', 'Pci'):-0.0008, ('Ct', 'Pci'):0.0016,
+        #NOT FILLED IN
+        ('CH3', 'A0i'):0.0141, ('CH2', 'A0i'):0.0189, ('CH', 'A0i'):0.0164, ('C', 'A0i'):0.0067, ('CH2d', 'A0i'):0.0113, ('CHd', 'A0i'):0.0129, ('Cd', 'A0i'):0.0117, ('Cdd', 'A0i'):0.0026, ('CHt', 'A0i'):0.0027, ('Ct', 'A0i'):0.0020,
+        ('CH3', 'B0i'):0.0141, ('CH2', 'B0i'):0.0189, ('CH', 'B0i'):0.0164, ('C', 'B0i'):0.0067, ('CH2d', 'B0i'):0.0113, ('CHd', 'B0i'):0.0129, ('Cd', 'B0i'):0.0117, ('Cdd', 'B0i'):0.0026, ('CHt', 'B0i'):0.0027, ('Ct', 'B0i'):0.0020,
+        ('CH3', 'C0i'):0.0141, ('CH2', 'C0i'):0.0189, ('CH', 'C0i'):0.0164, ('C', 'C0i'):0.0067, ('CH2d', 'C0i'):0.0113, ('CHd', 'C0i'):0.0129, ('Cd', 'C0i'):0.0117, ('Cdd', 'C0i'):0.0026, ('CHt', 'C0i'):0.0027, ('Ct', 'C0i'):0.0020,
+        ('CH3', 'D0i'):0.0141, ('CH2', 'D0i'):0.0189, ('CH', 'D0i'):0.0164, ('C', 'D0i'):0.0067, ('CH2d', 'D0i'):0.0113, ('CHd', 'D0i'):0.0129, ('Cd', 'D0i'):0.0117, ('Cdd', 'D0i'):0.0026, ('CHt', 'D0i'):0.0027, ('Ct', 'D0i'):0.0020,
+        }
 model.cg=Param(model.g, model.A, initialize=g_data, default=0)
 
 #valency data (defined for i for now)
@@ -34,14 +53,18 @@ model.vi=Param(model.i, initialize=v_i, default=0)
 type_data={'CH3':1, 'CH2':1, 'CH':1, 'C':1, 'CH2doubleCH':2, 'CHdoubleCH':2, 'CH2doubleC':2}
 model.grouptype = Param(model.i, initialize=type_data, default=0)
 
-#Number of groups in other groups (link between Cp and Hurekkikar et al) #TO CORRECT, when relation not mentionned we get zero
+#Number of groups in other groups (link between Cp and Hurekkikar et al)
+#Have defined for 1-10 Hukkerikar groups TO TEST 
+# #TO CORRECT, when relation not mentioned we get zero
 groups_data={('CH3', 'CH3'): 1,
              ('CH2', 'CH2'): 1, 
              ('CH', 'CH'): 1, 
              ('C', 'C'): 1, 
-             ('CH2doubleCH', 'CHdouble'): 1,('CH2doubleCH', 'CH2'): 1,
-             ('CHdoubleCH', 'CHdouble'): 2,
-             ('CH2doubleC', 'CH2'): 1,('CH2doubleC', 'Cdouble'): 1 }
+             ('CH2doubleCH', 'CHd'): 1,('CH2doubleCH', 'CH2'): 1,
+             ('CHdoubleCH', 'CHd'): 2,
+             ('CH2doubleC', 'CH2'): 1,('CH2doubleC', 'Cd'): 1 
+             ('CdoubleC', 'Cd'): 2
+             ('CHdoubleCdoubleCH', 'CH2d'):1, ('CHdoubleCdoubleCH', 'Cd'):1,('CHdoubleCdoubleCH', 'CHd'):1}
 model.ig=Param(model.i, model.g, initialize=groups_data, default=0)
 
 #----DEFINE VARIABLES--- ##WORK ON PROPERLY DEFINING BOUNDS
