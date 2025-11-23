@@ -15,7 +15,7 @@ model.g=Set(initialize=['CH3', 'CH2','CH','C','CH2d','CHd','Cd','Cdd','CHt','Ct'
                         'OHalc', 'OHphe', 'O', 'Or', 'CO', 'COr', 'OCH', 'COOH', 'COO', 'Od',   #Oxygen increments (ring and non-ring)
                         'NH2','NH', 'NHr', 'N', 'Nd', 'Ndr', 'NHd', 'CN', 'NO2',                #Nitrogen increments
                         'SH', 'S', 'Sr'])                                                       #Sulfur increments
-model.A=Set(initialize=['Cp']) #Calculated from Sahinidis
+model.A=Set(initialize=['Tci', 'Tbi', 'Pci', 'A0i', 'B0i', 'C0i', 'D0i']) #To calculate Cp from Sahinidis
 
 #First order groups for GC from Hukkerikar - need to finalise selection
 model.i=Set(initialize=['CH3','CH2','CH','C','CH2doubleCH','CHdoubleCH','CH2doubleC', 'CHdoubleC', 'CdoubleC', 'CH2doubleCdoubleCH'])#...
@@ -37,11 +37,10 @@ model.ci=Param(model.i, model.X, initialize=i_data, default=0)
 g_data={('CH3', 'Tci'):0.0141, ('CH2', 'Tci'):0.0189, ('CH', 'Tci'):0.0164, ('C', 'Tci'):0.0067, ('CH2d', 'Tci'):0.0113, ('CHd', 'Tci'):0.0129, ('Cd', 'Tci'):0.0117, ('Cdd', 'Tci'):0.0026, ('CHt', 'Tci'):0.0027, ('Ct', 'Tci'):0.0020,
         ('CH3', 'Tbi'):23.58, ('CH2', 'Tbi'):22.88, ('CH', 'Tbi'):21.74, ('C', 'Tbi'):18.25, ('CH2d', 'Tbi'):18.18, ('CHd', 'Tbi'):24.96, ('Cd', 'Tbi'):24.14, ('Cdd', 'Tbi'):26.15, ('CHt', 'Tbi'):9.20, ('Ct', 'Tbi'):27.38,
         ('CH3', 'Pci'):-0.0012, ('CH2', 'Pci'):0, ('CH', 'Pci'):0.0020 ('C', 'Pci'):0.0043, ('CH2d', 'Pci'):-0.0028, ('CHd', 'Pci'):-0.0006, ('Cd', 'Pci'):0.0011, ('Cdd', 'Pci'):0.0028, ('CHt', 'Pci'):-0.0008, ('Ct', 'Pci'):0.0016,
-        #NOT FILLED IN
-        ('CH3', 'A0i'):0.0141, ('CH2', 'A0i'):0.0189, ('CH', 'A0i'):0.0164, ('C', 'A0i'):0.0067, ('CH2d', 'A0i'):0.0113, ('CHd', 'A0i'):0.0129, ('Cd', 'A0i'):0.0117, ('Cdd', 'A0i'):0.0026, ('CHt', 'A0i'):0.0027, ('Ct', 'A0i'):0.0020,
-        ('CH3', 'B0i'):0.0141, ('CH2', 'B0i'):0.0189, ('CH', 'B0i'):0.0164, ('C', 'B0i'):0.0067, ('CH2d', 'B0i'):0.0113, ('CHd', 'B0i'):0.0129, ('Cd', 'B0i'):0.0117, ('Cdd', 'B0i'):0.0026, ('CHt', 'B0i'):0.0027, ('Ct', 'B0i'):0.0020,
-        ('CH3', 'C0i'):0.0141, ('CH2', 'C0i'):0.0189, ('CH', 'C0i'):0.0164, ('C', 'C0i'):0.0067, ('CH2d', 'C0i'):0.0113, ('CHd', 'C0i'):0.0129, ('Cd', 'C0i'):0.0117, ('Cdd', 'C0i'):0.0026, ('CHt', 'C0i'):0.0027, ('Ct', 'C0i'):0.0020,
-        ('CH3', 'D0i'):0.0141, ('CH2', 'D0i'):0.0189, ('CH', 'D0i'):0.0164, ('C', 'D0i'):0.0067, ('CH2d', 'D0i'):0.0113, ('CHd', 'D0i'):0.0129, ('Cd', 'D0i'):0.0117, ('Cdd', 'D0i'):0.0026, ('CHt', 'D0i'):0.0027, ('Ct', 'D0i'):0.0020,
+        ('CH3', 'A0i'):19.5, ('CH2', 'A0i'):-0.909, ('CH', 'A0i'):-23.0, ('C', 'A0i'):-66.2, ('CH2d', 'A0i'):23.6, ('CHd', 'A0i'):-8.00, ('Cd', 'A0i'):-28.1, ('Cdd', 'A0i'):27.4, ('CHt', 'A0i'):24.5, ('Ct', 'A0i'):7.87,
+        ('CH3', 'B0i'):-0.00808, ('CH2', 'B0i'):0.0950, ('CH', 'B0i'):0.204, ('C', 'B0i'):0.427, ('CH2d', 'B0i'):-0.00381, ('CHd', 'B0i'):0.105, ('Cd', 'B0i'):0.208, ('Cdd', 'B0i'):-0.0557, ('CHt', 'B0i'):-0.0271, ('Ct', 'B0i'):0.0201,
+        ('CH3', 'C0i'):1.53e-4, ('CH2', 'C0i'):-5.44e-5, ('CH', 'C0i'):-2.65e-4, ('C', 'C0i'):-6.41e-4, ('CH2d', 'C0i'):1.72e-4, ('CHd', 'C0i'):-9.63e-5, ('Cd', 'C0i'):-3.06-4, ('Cdd', 'C0i'):1.01e-4, ('CHt', 'C0i'):1.11e-4, ('Ct', 'C0i'):-8.33e-6,
+        ('CH3', 'D0i'):-9.67e-8, ('CH2', 'D0i'):1.19e-8, ('CH', 'D0i'):1.20e-7, ('C', 'D0i'):3.01e-7, ('CH2d', 'D0i'):-1.03e-7, ('CHd', 'D0i'):3.56e-8, ('Cd', 'D0i'):1.46e-7, ('Cdd', 'D0i'):-5.02e-8, ('CHt', 'D0i'):-6.78e-8, ('Ct', 'D0i'):1.39e-9,
         }
 model.cg=Param(model.g, model.A, initialize=g_data, default=0)
 
@@ -53,9 +52,10 @@ model.vi=Param(model.i, initialize=v_i, default=0)
 type_data={'CH3':1, 'CH2':1, 'CH':1, 'C':1, 'CH2doubleCH':2, 'CHdoubleCH':2, 'CH2doubleC':2}
 model.grouptype = Param(model.i, initialize=type_data, default=0)
 
-#Number of groups in other groups (link between Cp and Hurekkikar et al)
-#Have defined for 1-10 Hukkerikar groups TO TEST 
+#Number of groups in other groups (link between Sahnidis for Cp and Hurekkikar for other groups)
+#Have defined for only 1-10 Hukkerikar groups TO TEST 
 # #TO CORRECT, when relation not mentioned we get zero
+  #Need to define for entire design space
 groups_data={('CH3', 'CH3'): 1,
              ('CH2', 'CH2'): 1, 
              ('CH', 'CH'): 1, 
@@ -95,6 +95,7 @@ model.R0 = Param(initialize=4.7)#MPa 1/2, based on experimental work
 model.sigmacD=Param(initialize=15.6)#MPa 1/2
 model.sigmacP=Param(initialize=5.2)#MPa 1/2
 model.sigmacH=Param(initialize=5.8)#MPa 1/2
+model.T_avg = Param(initialize=353)#Kelvin - average of absorption and desorption columns
 
 ## --- scaling parameters --- rn using tanh but we could also use other
 model.k_rho = Param(initialize=0.01)     # steepness for rho scaling
@@ -117,10 +118,32 @@ def numgini_rule(model,g):#either we define specific exceptions to take into acc
     return model.ng[g]==sum(model.ni[i] * model.ig[i,g] for i in model.i)
 model.numgini = Constraint(model.g, rule=numgini_rule)
 
-# (3) Cp calculations from g-groups
-def CpGC_rule(model):#either we define specific exceptions to take into account the various f(X) or idk
-    return model.Cp == sum(model.ng[g] * model.cg[g, 'Cp'] for g in model.g)
-model.CpGC = Constraint(rule=CpGC_rule)
+
+# (3) Cp calculations from Sahinidis et al
+# # TO CORRECT - need to fix to be model.var, and to index through corresponding rows of model.cg
+##########################################
+# Critical temperature/pressure, boiling temperature from set of g-groups in final molecule
+T_b = 198.2 + sum(model.ng[i]*Tbi[i])
+T_c = T_b/(0.584 + 0.965*sum(model.ng[i]*model.cg['Tci']))
+P_c = (0.113 + 0.0032*sum(model.ng[i]) - sum(model.ng[i]*model.cg['Pci']))
+
+# Reduced average temperature
+T_avgr = model.T_avg/T_c
+
+# Acentric factor
+alpha = -5.97214 - log((P_c / 1.013) + ((6.09648 * T_c) / T_b)) + 1.28862*log(T_b/T_c) - 0.167347*(T_b/T_c)^6
+beta = 15.2518 - ((15.6875*T_c) / T_b) - 13.4721*log(T_b/T_c) + 0.43577*(T_b / T_c)^6
+model.W = alpha/ / beta
+
+# Ideal liquid heat capacity -- WHICH NEED TO BE DEFINED AS RULES??
+model.Cp0 == sum(model.ng[i]*A0i[i]) - 37/93 + (sum(model.ng[i]*B0i[i])+0.21)*model.T_avg + (sum(model.ng[i]*C0i[i])-3.91e-4)*model.T_avg^2 + (sum(model.ng[i]*D0i[i])+2.06e-7)*model.T_avg^3
+
+# final Cp liquid calculation (Rowlinson)
+def Cp_rule(model):#either we define specific exceptions to take into account the various f(X) or idk
+    return model.Cp == (1/4.1868)*(model.Cp0 + 8.314(1.45 + (0.45/(1-T_avgr)) + 0.25*model.W * (17.11 + 25.2 (((1 - T_avgr)^(1/3))/T_avgr) + (1.742 / (1-T_avgr)))))
+model.Cp= Constraint(rule=Cp_rule)
+##########################################
+
 
 # (4) def the various functions in Hurekkikar group contributions
 def link_properties_rule(model, X):
