@@ -106,6 +106,26 @@ model.ng = Var(model.g, within=NonNegativeReals)
 model.Cp = Var(within=NonNegativeReals)
 model.fX = Var(model.X, within=NonNegativeReals)  # property results (Tm, Tb, etc.)
 
+#Handling aromatic bonding
+# Big-M for counts (upper bound on total non-aromatic groups)
+if not hasattr(model, 'M_groups'):
+    M_groups = ni_max * max(1, len(model.i))
+    model.M_groups = Param(initialize=M_groups)
+
+# Indicator Params (0/1) for membership and valency > 2
+is_arom_dict = {i: 1 if i in list(model.Ga) else 0 for i in model.i}
+is_vgt2_arom_dict = {i: 1 if (i in list(model.Ga) and int(valency_dict.get(i, 0)) > 2) else 0 for i in model.i}
+
+model.is_arom = Param(model.i, initialize=is_arom_dict, default=0)
+model.is_vgt2_arom = Param(model.i, initialize=is_vgt2_arom_dict, default=0)
+
+# Expressions for counts
+model.count_arom_vgt2 = Expression(expr=sum(model.ni[i] * model.is_vgt2_arom[i] for i in model.i))
+model.count_non_aromatic = Expression(expr=sum(model.ni[i] * (1 - model.is_arom[i]) for i in model.i))
+
+# Binary indicating whether attachment out of the aromatic ring is permitted
+model.z_attach_ok = Var(within=Binary)
+
 #---PARAMETERS---
 model.Tb0 = Param(initialize=244.7889)#Kelvins
 model.Tm0 = Param(initialize=144.0977)#Kelvins
@@ -218,6 +238,22 @@ def cyclic_only_if_cyclic_mode_rule(model):
     return sum(model.ni[i] for i in model.Gc) <= model.M_groups * model.yc
 model.cyclic_only_if_cyclic_mode = Constraint(rule=cyclic_only_if_cyclic_mode_rule)
 
+#(14) aromatic group with a valency of >2 only can bind to non-aromatic groups
+
+# Link z_attach_ok to presence of at least one aromatic group with valency > 2
+def attach_ok_lower_rule(model):
+    return model.count_arom_vgt2 >= model.z_attach_ok
+model.attach_ok_lower = Constraint(rule=attach_ok_lower_rule)
+
+def attach_ok_upper_rule(model):
+    return model.count_arom_vgt2 <= model.M_groups * model.z_attach_ok
+model.attach_ok_upper = Constraint(rule=attach_ok_upper_rule)
+
+# Gate non-aromatic groups by aromatic mode and attach_ok
+def non_aromatic_allowed_in_aromatic_mode_rule(model):
+    return model.count_non_aromatic <= model.M_groups * (1 - model.ya) + model.M_groups * model.z_attach_ok
+model.non_aromatic_allowed_in_aromatic_mode = Constraint(rule=non_aromatic_allowed_in_aromatic_mode_rule)
+
 #Normalized expressions using tanh(kx)
 model.rho_norm = Expression(expr=tanh( model.rho * model.k_rho))##maybe not we want the larger it is the smaller it is so could put a sorth of inverse there instead of w the weights
 model.Cp_norm  = Expression(expr=tanh( model.Cp * model.k_Cp))
@@ -231,9 +267,11 @@ def objective_rule(model):
         model.w_Cp  * model.Cp_norm
     )
 model.obj = Objective(rule=objective_rule, sense=minimize)
+
 #Solve
-solver=SolverFactory('gams:ANTIGONE')#NOT sure if properly defined
-results=solver.solve(model, tee=True)
+solver = SolverFactory('gams')
+solver.options['solver'] = 'antigone'
+results = solver.solve(model, tee=True)
 
 #Display results
 # --- Display results ---
