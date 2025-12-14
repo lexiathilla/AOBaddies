@@ -2,8 +2,8 @@ from pyomo.environ import *
 import math
 import matplotlib.pyplot as plt
 import pandas as pd
-model = ConcreteModel('APOProject')
-inputGCs= "C:\Users\Alexia\OneDrive - Imperial College London\AAYEAR4\APO1\GCs.xlsx"
+model = ConcreteModel('APOProject')#creating our model
+inputGCs = r"C:\Users\Alexia\OneDrive - Imperial College London\AAYEAR4\APO1\GCs.xlsx"
 
 #Excel Reads
 df = pd.read_excel(inputGCs, sheet_name="Groups")
@@ -23,6 +23,9 @@ dfSVSH.index = dfSVSH.index.str.strip()
 #max number of groups per elements
 ni_max=8
 ng_max=10
+# Bit-lengths
+Ki_bits = math.ceil(math.log2(ni_max + 1))
+Kg_bits = math.ceil(math.log2(ng_max + 1))
 
 #Define SETS
 model.g = Set(initialize=dfcp.index.unique().tolist())#groups for GC Cp
@@ -35,11 +38,6 @@ model.B=Set(initialize=['acyclic','monocyclic'])#No'bicyclic'
 
 #Ki={i: math.ceil(math.log2(ni)) for i in model.i}  could create ngs and nis for each g and i btw
 #Kg={g: math.ceil(math.log2(ng)) for g in model.g}
-
-# Bit-lengths for binary expansion (correct Set initialization)
-# Bit-lengths
-Ki_bits = math.ceil(math.log2(ni_max + 1))
-Kg_bits = math.ceil(math.log2(ng_max + 1))
 
 # Index sets
 model.Ki = RangeSet(1, Ki_bits)
