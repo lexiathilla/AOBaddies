@@ -156,10 +156,30 @@ def numgini_rule(model,g):#either we define specific exceptions to take into acc
     return model.ng[g]==sum(model.ni[i] * model.ig[i,g] for i in model.i)
 model.numgini = Constraint(model.g, rule=numgini_rule)
 
-# (3) Cp calculations from g-groups
-def CpGC_rule(model):#either we define specific exceptions to take into account the various f(X) or idk
-    return model.Cp == sum(model.ng[g] * model.cg[g, 'Cp'] for g in model.g)
-model.CpGC = Constraint(rule=CpGC_rule)
+# (3) Cp calculations from Sahinidis et al
+# # TO CORRECT - need to fix to be model.var, and to index through corresponding rows of model.cg
+
+# Critical temperature/pressure, boiling temperature from set of g-groups in final molecule
+T_b = 198.2 + sum(model.ng[i]*Tbi[i])
+T_c = T_b/(0.584 + 0.965*sum(model.ng[i]*model.cg['Tci']))
+P_c = (0.113 + 0.0032*sum(model.ng[i]) - sum(model.ng[i]*model.cg['Pci']))
+
+# Reduced average temperature
+T_avgr = model.T_avg/T_c
+
+# Acentric factor
+alpha = -5.97214 - log((P_c / 1.013) + ((6.09648 * T_c) / T_b)) + 1.28862*log(T_b/T_c) - 0.167347*(T_b/T_c)^6
+beta = 15.2518 - ((15.6875*T_c) / T_b) - 13.4721*log(T_b/T_c) + 0.43577*(T_b / T_c)^6
+model.W = alpha/ / beta
+
+# Ideal liquid heat capacity -- WHICH NEED TO BE DEFINED AS RULES??
+model.Cp0 == sum(model.ng[i]*A0i[i]) - 37/93 + (sum(model.ng[i]*B0i[i])+0.21)*model.T_avg + (sum(model.ng[i]*C0i[i])-3.91e-4)*model.T_avg^2 + (sum(model.ng[i]*D0i[i])+2.06e-7)*model.T_avg^3
+
+# final Cp liquid calculation (Rowlinson)
+def Cp_rule(model):#either we define specific exceptions to take into account the various f(X) or idk
+    return model.Cp == (1/4.1868)*(model.Cp0 + 8.314(1.45 + (0.45/(1-T_avgr)) + 0.25*model.W * (17.11 + 25.2 (((1 - T_avgr)^(1/3))/T_avgr) + (1.742 / (1-T_avgr)))))
+model.Cp= Constraint(rule=Cp_rule)
+
 
 # (4) def the various functions in Hurekkikar group contributions, not sure it properly relates to our properties definitions
 def link_properties_rule(model, X):
