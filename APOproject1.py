@@ -11,8 +11,10 @@ df.columns = df.columns.str.strip()   # Clean spaces
 
 dfcp=pd.read_excel(inputGCs, sheet_name="CpGC")
 dfcp.columns = dfcp.columns.str.strip()   # Clean spaces
+dfcp['Group'] = dfcp['Group'].astype(str).strip()  # ensure clean labels
+dfcp = dfcp.set_index('Group') 
 
-dfSVSH = pd.read_excel("GCs.xlsx", sheet_name="SVSH", index_col=0)
+dfSVSH = pd.read_excel(inputGCs, sheet_name="SVSH", index_col=0)
 dfSVSH.columns = dfSVSH.columns.str.strip()
 dfSVSH.index = dfSVSH.index.str.strip()
 
@@ -21,7 +23,7 @@ ni_max=8
 ng_max=10
 
 #Define SETS
-model.g = Set(initialize=dfcp['Group'].unique().tolist())#groups for GC Cp
+model.g = Set(initialize=dfcp.index.unique().tolist())#groups for GC Cp
 model.i = Set(initialize=df['Group'].unique().tolist())#First order groups for GC - need to choose from large variety - litterature backed ?
 model.A=Set(initialize=['Cp'])
 X_props = ['Tb1i','Tm1i','δD1i','δP1i','δH1i','Vm1i']
@@ -32,11 +34,10 @@ model.B=Set(initialize=['acyclic','monocyclic'])#No'bicyclic'
 #Kg={g: math.ceil(math.log2(ng)) for g in model.g}
 
 # Bit-lengths for binary expansion (correct Set initialization)
-Ki = math.ceil(math.log2(ni_max))
-Kg = math.ceil(math.log2(ng_max))
-# Create index sets
-model.Ki = Set(1, Ki + 1)
-model.Kg = Set(1, Kg + 1)
+Ki_bits = math.ceil(math.log2(ni_max + 1))
+Kg_bits = math.ceil(math.log2(ng_max + 1))
+model.Ki = RangeSet(1, Ki_bits)
+model.Kg = RangeSet(1, Kg_bits)
 
 #Define Parameters GC, ideally for each grp considered and each property (i,X)
 i_data = {}
@@ -47,10 +48,14 @@ for _, row in df.iterrows():
 model.ci = Param(model.i, model.X, initialize=i_data, default=0)
 
 #for Cp, group contributions
-g_data = { (g, 'Cp'): float(dfcp.loc[g, 'Cp'])
-           for g in model.g if 'Cp' in dfcp.columns }
-model.cg = Param(model.g, model.A, initialize=g_data, default=0)
+#g_data = { (g, 'Cp'): float(dfcp.loc[g, 'Cp'])
+#           for g in model.g if 'Cp' in dfcp.columns }
+#model.cg = Param(model.g, model.A, initialize=g_data, default=0)
 
+g_map = dfcp['Cp'].astype(float).to_dict()
+g_data = {(g, 'Cp'): g_map.get(g, 0.0) for g in model.g}
+
+model.cg = Param(model.g, model.A, initialize=g_data, default=0.0)
 
 #valency data (defined for i for now)
 valency_dict = df.set_index('Group')['Valency 1'].to_dict()
@@ -81,7 +86,7 @@ model.ig = Param(model.i, model.g, initialize=ig_dict, default=0)
 model.Tm=Var(within=NonNegativeReals, bounds=(0.01, 313)) #in K
 model.Tb=Var(within=NonNegativeReals, bounds=(0.01, 393)) #in K
 model.rho=Var(within=NonNegativeReals, bounds=(0.0001, None)) #in DEFINE
-model.RED=Var(within=NonNegativeReals, bounds=(0.001, None)) #in K
+model.RED=Var(within=NonNegativeReals, bounds=(0.0001, None)) #in K
 model.sol1=Var(within=NonNegativeReals, bounds=(0.0001, None)) #in K
 model.sol2=Var(within=NonNegativeReals, bounds=(0.0001, None)) #in K
 model.sol3=Var(within=NonNegativeReals, bounds=(0.0001, None)) #in K
@@ -101,6 +106,8 @@ model.yc = Var(within=Binary)  # cyclic (non-aromatic) mode
 
 #Integer counts (calculated with binary variables)
 model.ni=Var(model.i, within=NonNegativeReals)#!!! watch w the integer cuts thing might have to def ni=sumk=0 to k 2^kyik (continuous associated with a set of binary variables)
+M_groups_vals = ni_max * max(1, len(model.i))
+model.M_groups = Param(initialize=M_groups_vals)
 model.ng = Var(model.g, within=NonNegativeReals)
 
 model.Cp = Var(within=NonNegativeReals)
@@ -109,8 +116,7 @@ model.fX = Var(model.X, within=NonNegativeReals)  # property results (Tm, Tb, et
 #Handling aromatic bonding
 # Big-M for counts (upper bound on total non-aromatic groups)
 if not hasattr(model, 'M_groups'):
-    M_groups = ni_max * max(1, len(model.i))
-    model.M_groups = Param(initialize=M_groups)
+
 
 # Indicator Params (0/1) for membership and valency > 2
 is_arom_dict = {i: 1 if i in list(model.Ga) else 0 for i in model.i}
@@ -139,16 +145,24 @@ model.sigmacH=Param(initialize=5.8)#MPa 1/2
 model.k_rho = Param(initialize=0.01)     # steepness for rho scaling
 model.k_Cp = Param(initialize=0.05)     # steepness for Cp scaling
 model.k_RED = Param(initialize=0.1) ## steepness for RED scaling
+model.rhomin=Param(initialize=9000)
+model.rhomax=Param(initialize=36667)#in mol/m^3 estimation using litterature values
+model.Cpmin=Param(initialize=0.01)
+model.Cpmax=Param(initialize=0.167)#in J/mol K, estimation using littereature values as well
+model.REDmin=Param(initialize=0.0001)
+model.REDmax=Param(initialize=1)#in J/gK, estimation using littereature values as well
+# small epsilon for numerical safety
+model.eps = Param(initialize=1e-12)
 
 # --- Objective function weights ---
 model.w_RED = Param(initialize=1.0)     # weight for RED
-model.w_rho = Param(initialize=-1.0)     # weight for density-NEGATIVE BECAUSE WE WANT TO MAXIMIZE IT
+model.w_rho = Param(initialize=1.0)     # weight for density-NEGATIVE BECAUSE WE WANT TO MAXIMIZE IT
 model.w_Cp  = Param(initialize=1.0)     # weight for heat capacity
 
 # --- Constraints ---
 # (1) property group contribution relationship
 def XGC_rule(model, X):
-    return model.fX[X]==(sum(model.ni[i] * model.ci[i, X]) for i in model.i)
+    return model.fX[X]==sum(model.ni[i] * model.ci[i, X] for i in model.i)
 model.XGC=Constraint(model.X,rule=XGC_rule)
 
 # (2) Number of g-groups derived from i-groups
@@ -178,7 +192,7 @@ model.Cp0 == sum(model.ng[i]*A0i[i]) - 37/93 + (sum(model.ng[i]*B0i[i])+0.21)*mo
 # final Cp liquid calculation (Rowlinson)
 def Cp_rule(model):#either we define specific exceptions to take into account the various f(X) or idk
     return model.Cp == (1/4.1868)*(model.Cp0 + 8.314(1.45 + (0.45/(1-T_avgr)) + 0.25*model.W * (17.11 + 25.2 (((1 - T_avgr)^(1/3))/T_avgr) + (1.742 / (1-T_avgr)))))
-model.Cp= Constraint(rule=Cp_rule)
+model.Cp_con= Constraint(rule=Cp_rule)
 
 
 # (4) def the various functions in Hurekkikar group contributions, not sure it properly relates to our properties definitions
@@ -251,9 +265,6 @@ def aromatic_ring_rule(model):
 model.aromatic_ring = Constraint(rule=aromatic_ring_rule)
 
 # Forbid cyclic groups unless cyclic mode is chosen (Big-M)
-M_groups = ni_max * max(1, len(model.i))  # safe upper bound
-model.M_groups = Param(initialize=M_groups)
-
 def cyclic_only_if_cyclic_mode_rule(model):
     return sum(model.ni[i] for i in model.Gc) <= model.M_groups * model.yc
 model.cyclic_only_if_cyclic_mode = Constraint(rule=cyclic_only_if_cyclic_mode_rule)
@@ -275,15 +286,21 @@ def non_aromatic_allowed_in_aromatic_mode_rule(model):
 model.non_aromatic_allowed_in_aromatic_mode = Constraint(rule=non_aromatic_allowed_in_aromatic_mode_rule)
 
 #Normalized expressions using tanh(kx)
-model.rho_norm = Expression(expr=tanh( model.rho * model.k_rho))##maybe not we want the larger it is the smaller it is so could put a sorth of inverse there instead of w the weights
-model.Cp_norm  = Expression(expr=tanh( model.Cp * model.k_Cp))
-model.RED_norm  = Expression(expr=tanh(model.RED * model.k_RED))
-
+#model.rho_norm = Expression(expr=tanh( model.rho * model.k_rho))##maybe not we want the larger it is the smaller it is so could put a sorth of inverse there instead of w the weights
+#model.Cp_norm  = Expression(expr=tanh( model.Cp * model.k_Cp))
+#model.RED_norm  = Expression(expr=tanh(model.RED * model.k_RED))#why is RED white here and not the other guys
+#Normalized Expression using traditional scaling
+model.rho_norm = Expression(
+    expr=(model.rho - model.rhomin) / (model.rhomax - model.rhomin + model.eps))
+model.Cp_norm = Expression(
+    expr=(model.Cp - model.Cpmin) / (model.Cpmax - model.Cpmin + model.eps))
+model.RED_norm = Expression(
+    expr=(log(model.RED) - log(model.REDmin)) / (log(model.REDmax) - log(model.REDmin) + model.eps))
 ##Actual objective function
 def objective_rule(model):
     return (
         model.w_RED * model.RED_norm +
-        model.w_rho * model.rho_norm +
+        model.w_rho *(1- model.rho_norm) +
         model.w_Cp  * model.Cp_norm
     )
 model.obj = Objective(rule=objective_rule, sense=minimize)
