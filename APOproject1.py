@@ -3,7 +3,7 @@ import math
 import matplotlib.pyplot as plt
 import pandas as pd
 model = ConcreteModel('APOProject')
-inputGCs="C:\Users\Alexia\OneDrive - Imperial College London\AAYEAR4\APO1\GCs.xlsx"
+inputGCs= r"C:\Users\Alexia\OneDrive - Imperial College London\AAYEAR4\APO1\GCs.xlsx"
 
 #Excel Reads
 df = pd.read_excel(inputGCs, sheet_name="Group")

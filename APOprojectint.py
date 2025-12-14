@@ -21,8 +21,11 @@ dfSVSH = pd.read_excel(inputGCs, sheet_name="SVSH", index_col=0)
 dfSVSH.columns = dfSVSH.columns.str.strip()
 dfSVSH.index = dfSVSH.index.str.strip()
 
-# --- Max group count (used as bounds and big-M for cuts) ---
+# --- Max individual groups count (used as bounds and big-M for cuts) ---
 ni_max = 8
+#max total groups
+most=15
+least=1
 
 # --- Sets ---
 model.g = Set(initialize=dfcp.index.unique().tolist())
@@ -231,9 +234,11 @@ model.non_aromatic_allowed_in_aromatic_mode = Constraint(
     expr=model.count_non_aromatic <= model.M_groups * (1 - model.ya) + model.M_groups * model.z_attach_ok
 )
 
-# At least one group
-model.at_least_one = Constraint(expr=sum(model.ni[i] for i in model.i) >= 1)
+# At least n groups
+model.at_least = Constraint(expr=sum(model.ni[i] for i in model.i) >= least)
 
+# At least most n groups
+model.at_most = Constraint(expr=sum(model.ni[i] for i in model.i) <= most)
 # Min 5 cyclic groups if cyclic non-aromatic
 model.min_cyclic_groups = Constraint(expr=sum(model.ni[i] for i in model.Gc) >= 5 * model.yc)
 
