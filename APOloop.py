@@ -277,8 +277,9 @@ def build_model(xlsx_path: str, specni) -> ConcreteModel:
 
     # At least most n groups
     model.at_most = Constraint(expr=sum(model.ni[i] for i in model.i) <= most)
-    # Min 5 cyclic groups if cyclic non-aromatic
+    # Min 5 cyclic groups and max 8 if cyclic non-aromatic
     model.min_cyclic_groups = Constraint(expr=sum(model.ni[i] for i in model.Gc) >= 5 * model.yc)
+    model.max_cyclic_groups = Constraint(expr=sum(model.ni[i] for i in model.Gc) <= 8 * model.yc)
 
     # ---- Exclusion (nogood) cut: robust build over intersection with model.i ----
     '''
@@ -304,7 +305,7 @@ def build_model(xlsx_path: str, specni) -> ConcreteModel:
     # Binary indicators: diff[i] = 1 if ni[i] differs from target_excl[i], otherwise 0
     model.diff = Var(model.EXCL, within=Binary)
 
-    # Safe Big-M: use ni_max
+    # Safe Big-M: use ni_max !!!WILL HAVE TO MODIF 2 TAKE INTO ACCOUNT new ni_max definitions
     M_cut = ni_max_default
 
     def diff_upper_rule(model, i):
