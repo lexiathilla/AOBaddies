@@ -14,7 +14,7 @@ import json
 # ------------------------------------------------------------
 # 1) Model builder: wrap your APOprojectint.py content here
 # ------------------------------------------------------------
-def build_model(xlsx_path: str) -> ConcreteModel:
+def build_model(xlsx_path: str, specni) -> ConcreteModel:
     model = ConcreteModel("APOProject")
     # --- Excel Reads ---
     df = pd.read_excel(xlsx_path, sheet_name="Groups")
@@ -32,7 +32,10 @@ def build_model(xlsx_path: str) -> ConcreteModel:
     dfSVSH.index = dfSVSH.index.str.strip()
 
     # --- Max individual groups count (used as bounds and big-M for cuts) ---
-    ni_max = 8
+    if specni:
+        ni_max_default= 20
+    else:
+        ni_max_default=8
     #max total groups
     most=15
     least=1
@@ -41,6 +44,10 @@ def build_model(xlsx_path: str) -> ConcreteModel:
     model.g = Set(initialize=dfcp.index.unique().tolist())
     model.i = Set(initialize=df.index.unique().tolist())
 
+    #Index and  set
+    ni_lim=['nimax','nimin']
+    model.ni_lim = Set(initialize=ni_lim)
+
     A_props = ['Tci', 'Pci', 'Tbi', 'A0i', 'B0i', 'C0i', 'D0i']
     model.A = Set(initialize=A_props)
 
@@ -48,6 +55,12 @@ def build_model(xlsx_path: str) -> ConcreteModel:
     model.X = Set(initialize=X_props)
 
     model.B = Set(initialize=['acyclic','monocyclic'])
+
+    #--Parameters : max and min number of groups--
+    if specni:
+        nilim_data={(i, k): float(df.loc[i, k]) for i in df.index for k in ni_lim}
+        model.nilim = Param(model.i, model.ni_lim, initialize=nilim_data, default=0)
+        model.nilim.display()
 
     # --- Parameters: Hukkerikar contributions (i,X) ---
     i_data = {(i, X): float(df.loc[i, X]) for i in df.index for X in X_props}
@@ -124,7 +137,7 @@ def build_model(xlsx_path: str) -> ConcreteModel:
     model.molarvol = Var(within=NonNegativeReals, bounds=(1e-6, 100000))
 
     # REMOVED binary expansion; use pure integers
-    model.ni = Var(model.i, within=NonNegativeIntegers, bounds=(0, ni_max))
+    model.ni = Var(model.i, within=NonNegativeIntegers, bounds=(0, ni_max_default))
     model.ng = Var(model.g, within=NonNegativeIntegers, bounds=(0, 100))
 
     # Mode and selection binaries
@@ -146,8 +159,14 @@ def build_model(xlsx_path: str) -> ConcreteModel:
     model.fX = Var(model.X, within=Reals)
 
     # Big-M
-    M_groups_val = ni_max * max(1, len(model.i))
-    model.M_groups = Param(initialize=M_groups_val)
+    if specni:
+        def _M_init(m):
+            max_nimax = max(int(value(m.nilim[i, 'nimax'])) for i in m.i) if len(m.i) > 0 else 0
+            return max_nimax * max(1, len(m.i))
+        model.M_groups = Param(initialize=_M_init)
+    else:
+        M_groups_val = ni_max_default * max(1, len(model.i))
+        model.M_groups = Param(initialize=M_groups_val)
 
     # Indicators
     is_arom_dict = {i: 1 if i in list(model.Ga) else 0 for i in model.i}
@@ -166,6 +185,15 @@ def build_model(xlsx_path: str) -> ConcreteModel:
     def XGC_rule(model, X):
         return model.fX[X] == sum(model.ni[i] * model.ci[i, X] for i in model.i)
     model.XGC = Constraint(model.X, rule=XGC_rule)
+
+    if specni:
+        print("adding nimin/max constraints")
+        def minmaxni_rule(model, i, k):
+            if k == 'nimax':
+                return model.ni[i] <= model.nilim[i, 'nimax']
+            elif k == 'nimin':
+                return model.ni[i] >= model.nilim[i, 'nimin']
+        model.nibounds = Constraint(model.i, model.ni_lim, rule=minmaxni_rule)
 
     def numgini_rule(model, g):
         return model.ng[g] == sum(model.ni[i] * model.ig[i, g] for i in model.i)
@@ -277,7 +305,7 @@ def build_model(xlsx_path: str) -> ConcreteModel:
     model.diff = Var(model.EXCL, within=Binary)
 
     # Safe Big-M: use ni_max
-    M_cut = ni_max
+    M_cut = ni_max_default
 
     def diff_upper_rule(model, i):
         # ni[i] - target[i] <= M * diff[i]
@@ -389,9 +417,9 @@ def run_with_weights(base_model: ConcreteModel, weights, solver_name="gams", gam
 # ------------------------------------------------------------
 # 3) Loop over weight vectors and export to Excel
 # ------------------------------------------------------------
-def run_batch_and_export(xlsx_path: str, vectors, out_xlsx="results_weights.xlsx",
+def run_batch_and_export(specni, xlsx_path: str, vectors, out_xlsx="results_weights.xlsx",
                          solver_name="gams", gams_solver="DICOPT"):
-    base_model = build_model(xlsx_path)
+    base_model = build_model(xlsx_path, specni)
 
     metrics_rows = []
     ni_tables = []
@@ -435,7 +463,7 @@ def run_batch_and_export(xlsx_path: str, vectors, out_xlsx="results_weights.xlsx
 # ------------------------------------------------------------
 if __name__ == "__main__":
     xlsx_path = r"C:\Users\Alexia\OneDrive - Imperial College London\AAYEAR4\APO1\GCs.xlsx"
-
+    specni=True
     vectors = [
         [1.0, 1.0, 1.0],
         [1.5, 1.5, 0.5],
@@ -445,7 +473,7 @@ if __name__ == "__main__":
         [1.5, 0.5, 0.5],
     ]
 
-    metrics_df, ni_df, ng_df = run_batch_and_export(
+    metrics_df, ni_df, ng_df = run_batch_and_export(specni=specni,
         xlsx_path=xlsx_path,
         vectors=vectors,
         out_xlsx="results_weights.xlsx",
