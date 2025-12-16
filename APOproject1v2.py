@@ -26,7 +26,7 @@ dfSVSH.columns = dfSVSH.columns.str.strip()
 dfSVSH.index = dfSVSH.index.str.strip()
 
 #Max number of times a given group can be in the molecule
-#15 used in Sahinidis
+#15 used in Sahinidis et. al
 ni_max=15
 
 #Binary expension bits
