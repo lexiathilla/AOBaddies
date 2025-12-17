@@ -34,7 +34,7 @@ Ki_bits = math.ceil(math.log2(ni_max + 1))
 
 #----DEFINE SETS----
 model.g = Set(initialize=dfcp.index.unique().tolist()) #Groups and properties for GC Cp (Sahinidis et. al)
-A_props=['Tci', 'Pci', 'Tbi',  'A0i', 'B0i', 'C0i', 'D0i'] #To calculate Cp from Sahinidis
+A_props=['Tci', 'Pci', 'Tbi',  'A0i', 'B0i', 'C0i', 'D0i', 'ai'] #To calculate Cp from Sahinidis
 model.A=Set(initialize=A_props)
 
 model.i = Set(initialize=df.index.unique().tolist()) #First order groups and properties for GC (Hukkerikar et. al)
@@ -119,8 +119,8 @@ model.REDmax=Param(initialize=10) #in J/gK, estimation using litereature values
 model.eps = Param(initialize=1e-12)#double check if really useful
 
 # Objective function weights 
-model.w_RED = Param(initialize=1.0)     # weight for RED
-model.w_rho = Param(initialize=1.0)     # weight for density-NEGATIVE BECAUSE WE WANT TO MAXIMIZE IT
+model.w_RED = Param(initialize=0)     # weight for RED
+model.w_rho = Param(initialize=0)     # weight for density-NEGATIVE BECAUSE WE WANT TO MAXIMIZE IT
 model.w_Cp  = Param(initialize=1.0)     # weight for heat capacity
 
 #----DEFINE VARIABLES---## Need to justify bound selection
@@ -146,15 +146,17 @@ model.yc =Var(within=Binary)  # cyclic (non-aromatic) mode Param (initialize=0)
 
 #Integer counts (calculated from binary variables)
 model.ni = Var(model.i, within=NonNegativeReals, bounds=(0, ni_max))#!!! watch w the integer cuts thing might have to def ni=sumk=0 to k 2^kyik (continuous associated with a set of binary variables)
-model.ng = Var(model.g, within=NonNegativeReals, bounds=(0, None))
+model.ng = Var(model.g, within=NonNegativeReals, bounds=(0, None), initialize=1.0)
 
 #Intermediate variables for calculating Cp, bounds copied from Sahinidis et. al where bounding doesn't result in infeasible
 #Could eliminate by defining Cp but then can't bound
 model.T_b = Var(within=NonNegativeReals, initialize=350, bounds=(50, 1000)) #K
 model.T_c = Var(within=NonNegativeReals, initialize=500, bounds=(100, 2000)) #K
-model.P_c = Var(within=PositiveReals, initialize=1.0) #bar, bounds=(2, 200)
+model.P_c = Var(within=PositiveReals, initialize=5.0, bounds=(2, 200)) #bar
 model.T_avgr = Var(within=PositiveReals, initialize=0.7, bounds=(0.001, 1)) #K/K
-model.W = Var(within=Reals, initialize=0.3) #bounds=(-1, 1.3)
+model.alpha = Var(within=Reals, initialize=0.1, bounds=(-5.4, 6100)) # N/A
+model.beta = Var(within=Reals, initialize=-1.0, bounds=(-160000, 0)) # N/A
+model.W = Var(within=Reals, initialize=0.3, bounds=(-1, 1.3)) # N/A
 model.Cp0 = Var(within=NonNegativeReals, initialize=1) #cal/mol*K (converted so Cp is in J/mol*K)
 
 #Properties results
@@ -199,12 +201,12 @@ model.Tb_calc = Constraint(rule=Tb_calc_rule)
 
 # Critical temperature (reformulated to avoid division)
 def Tc_calc_rule(model):
-    return model.T_c * (0.584 + 0.965 * sum(model.ng[g] * model.cg[g, 'Tci'] for g in model.g)) == model.T_b
+    return model.T_c * (0.584 + 0.965 * sum(model.ng[g] * model.cg[g, 'Tci'] for g in model.g) - (sum(model.ng[g] * model.cg[g, 'Tci'] for g in model.g))**2 ) == model.T_b
 model.Tc_calc = Constraint(rule=Tc_calc_rule)
 
 # Critical pressure
 def Pc_calc_rule(model):
-    return model.P_c == (0.113 + 0.0032 * sum(model.ng[g] for g in model.g) - sum(model.ng[g] * model.cg[g, 'Pci'] for g in model.g))
+    return model.P_c == 1 / (0.113 + 0.0032 * sum(model.ng[g] * model.cg[g, 'ai'] for g in model.g) - sum(model.ng[g] * model.cg[g, 'Pci'] for g in model.g))**(2)
 model.Pc_calc = Constraint(rule=Pc_calc_rule)
 
 # Reduced average temperature (reformulated)
@@ -213,17 +215,28 @@ def Tavgr_calc_rule(model):
 model.Tavgr_calc = Constraint(rule=Tavgr_calc_rule)
 
 # Acentric factor
-def W_calc_rule(model):
-    alpha = (-5.97214 - log(model.P_c / 1.013 + (6.09648 * model.T_c) / model.T_b) + 
-             1.28862 * log(model.T_b / model.T_c) - 0.167347 * (model.T_b / model.T_c)**6)
-    beta = (15.2518 - (15.6875 * model.T_c) / model.T_b - 13.4721 * log(model.T_b / model.T_c) + 
+# Split alpha and beta into rules because somehow it changes the calculation??
+def alpha_calc_rule(model):
+    return model.alpha == (-5.97214 - log(model.P_c / 1.013) + ((6.09648 * model.T_c) / model.T_b) + 
+             1.28862 * log(model.T_b / model.T_c) - 0.169347 * (model.T_b / model.T_c)**6)
+model.alpha_calc = Constraint(rule=alpha_calc_rule)
+
+def beta_calc_rule(model):
+    return model.beta == (15.2518 - ((15.6875 * model.T_c) / model.T_b) - 13.4721 * log(model.T_b / model.T_c) + 
             0.43577 * (model.T_b / model.T_c)**6)
-    return model.W * beta == alpha
+model.beta_calc = Constraint(rule=beta_calc_rule)
+
+def W_calc_rule(model):
+    #model.alpha = (-5.97214 - log((model.P_c / 1.013) + (6.09648 * model.T_c) / model.T_b) + 
+    #         1.28862 * log(model.T_b / model.T_c) - 0.167347 * (model.T_b / model.T_c)**6)
+    #model.beta = (15.2518 - ((15.6875 * model.T_c) / model.T_b) - 13.4721 * log(model.T_b / model.T_c) + 
+    #        0.43577 * (model.T_b / model.T_c)**6)
+    return model.W * model.beta == model.alpha
 model.W_calc = Constraint(rule=W_calc_rule)
 
 # Ideal liquid heat capacity
 def Cp0_calc_rule(model):
-    return model.Cp0 == (sum(model.ng[g] * model.cg[g, 'A0i'] for g in model.g) - 37.0/93.0 +
+    return model.Cp0 == (sum(model.ng[g] * model.cg[g, 'A0i'] for g in model.g) - 37.93 +
                          (sum(model.ng[g] * model.cg[g, 'B0i'] for g in model.g) + 0.21) * model.T_avg +
                          (sum(model.ng[g] * model.cg[g, 'C0i'] for g in model.g) - 3.91e-4) * model.T_avg**2 +
                          (sum(model.ng[g] * model.cg[g, 'D0i'] for g in model.g) + 2.06e-7) * model.T_avg**3)
@@ -463,6 +476,10 @@ if model.P_c.value:
     print(f"  Critical Pressure:         {model.P_c.value:.4f} bar")
 if model.T_avgr.value:
     print(f"  Reduced Avg Temperature:   {model.T_avgr.value:.4f}")
+if model.alpha.value:
+    print(f"  Alpha:         {model.alpha.value:.4f} ")
+if model.beta.value:
+    print(f"  Beta:         {model.beta.value:.4f}")
 if model.W.value:
     print(f"  Acentric Factor (W):       {model.W.value:.4f}")
 if model.Cp0.value:
