@@ -307,52 +307,54 @@ def RED_def_rule(model):
     )
 model.RED_def = Constraint(rule=RED_def_rule)
 
-#(7) Allowing only one type of molecule
+#(7) Mode Selection and ring/aromatic logic
+# 7.1 Allowing only one type of molecule (acyclic or monocyclic)
 def one_type(model):
     return sum (model.yb[b] for b in model.B) ==1
 model.one_type = Constraint(rule=one_type)
 
-#(8) Relating m to binary molecule types:
+#7.2 Relating m to molecule types:
 def m_rule(model):
     return model.m == 1-model.yb['monocyclic']
 model.m_rule = Constraint(rule=m_rule)
 
-#(9) Expressing ni as an integer variables with linear expressions - NOT USED ATM
-#def ni_rule(model,i):
-#    return model.ni[i] == sum(2**(k-1)*model.yi[i,k] for k in model.Ki)
-#model.ni_rule = Constraint(model.i,rule=ni_rule)
-
-#(11) Octet Rule, i compounds
+#(8) Octet Rule, i compounds
 def vi_rule(model):
     return 2*model.m==sum((2-model.vi[i])*model.ni[i] for i in model.i)
 model.vi_rule = Constraint(rule=vi_rule)
 
-#(12) One cyclic mode
-# Exactly one mode if monocyclic, none if acyclic
+#(preparing integer cuts) Expressing ni as an integer variables with linear expressions - NOT USED ATM
+#def ni_rule(model,i):
+#    return model.ni[i] == sum(2**(k-1)*model.yi[i,k] for k in model.Ki)
+#model.ni_rule = Constraint(model.i,rule=ni_rule)
+
+#(9) Bonding rule
+def bi_rule(model, i):
+    return model.ni[i]*(model.vi[i]-1)+2-sum(model.ni[u] for u in model.i)<=0 
+model.bi_rule = Constraint(model.i, rule=bi_rule)
+
+#(10) Cyclic and aromatic logic
+# 10.1 Exactly one mode if monocyclic, none if acyclic
 def monocyclic_mode_selection_rule(model):
     return model.ya + model.yc == model.yb['monocyclic']
 model.monocyclic_mode_selection = Constraint(rule=monocyclic_mode_selection_rule)
 
-#(13) Aromatic & cyclic constraints
-# Exactly 6 aromatic groups if aromatic mode; 0 aromatic groups otherwise -- SHOULD BE 5 OR 6
+# 10.2 Exactly 6 aromatic groups if aromatic mode; 0 aromatic groups otherwise -- SHOULD BE 5 OR 6
 def aromatic_ring_rule(model):
     return sum(model.ni[i] for i in model.Ga) == 6 * model.ya
 model.aromatic_ring = Constraint(rule=aromatic_ring_rule)
 
-# Forbid cyclic groups unless cyclic mode is chosen (Big-M)- Check If getting rid of this still work
-def cyclic_only_if_cyclic_mode_rule(model):
-    return sum(model.ni[i] for i in model.Gc) <= model.M_groups * model.yc
-#model.cyclic_only_if_cyclic_mode = Constraint(rule=cyclic_only_if_cyclic_mode_rule)
-
+# 10.3 Forbid cyclic groups unless cyclic mode is chosen : upper limit
 def cyclic_upper_only_if_cyclic_mode_rule(model):
     return sum(model.ni[i] for i in model.Gc) <= 8 * model.yc
 model.cyclic_only_if_cyclic_mode = Constraint(rule=cyclic_upper_only_if_cyclic_mode_rule)
 
+# 10.4 Forbid cyclic groups unless cyclic mode is chosen : lower limit
 def cyclic_lower_only_if_cyclic_mode_rule(model):
     return sum(model.ni[i] for i in model.Gc) >= 5 * model.yc
 model.cyclic_only_if_cyclic_mode = Constraint(rule=cyclic_lower_only_if_cyclic_mode_rule)
 
-#(14) Aromatic group with a valency of >2 only can bind to non-aromatic groups
+#11 Aromatic group with a valency of >2 only can bind to non-aromatic groups
 def attach_ok_lower_rule(model):
     return model.count_arom_vgt2 >= model.z_attach_ok
 model.attach_ok_lower = Constraint(rule=attach_ok_lower_rule)
@@ -365,28 +367,18 @@ def non_aromatic_allowed_in_aromatic_mode_rule(model):
     return model.count_non_aromatic <= model.M_groups * (1 - model.ya) + model.M_groups * model.z_attach_ok
 model.non_aromatic_allowed_in_aromatic_mode = Constraint(rule=non_aromatic_allowed_in_aromatic_mode_rule)
 
-#(15) Bonding rule 
-def bi_rule(model, i):
-    return model.ni[i]*(model.vi[i]-1)+2-sum(model.ni[u] for u in model.i)<=0 
-model.bi_rule = Constraint(model.i, rule=bi_rule)
-
-#(16) Minimum of two groups bonded to each other
+#12 Min and max size of molecule (in terms of number of groups - could be nice to do in terms of number of atoms)
+# 12.1 Minimum number of groups
 def zer(model):
     return sum(model.ni[k] for k in model.i)>=least
 model.zer_rule = Constraint(rule=zer)    
 
-#(17) Maximum amount of groups
+# 12.2 Maximum number of groups
 def maxgroups(model):
     return sum(model.ni[k] for k in model.i)<=most
 model.max_rule = Constraint(rule=maxgroups)    
 
-#(18) Minimum cyclic groups if cyclic non-aromatic mode : add a max cyclic ?
-def min_cyclic_groups_rule(model):
-    return sum(model.ni[i] for i in model.Gc) >= 5 * model.yc
-model.min_cyclic_groups = Constraint(rule=min_cyclic_groups_rule)
-
-
-#(19) Min and max ni constraints
+#13 Min and max ni constraints
 if specni:
         print("adding nimin/max constraints")
         def minmaxni_rule(model, i, k):
@@ -476,7 +468,7 @@ def safe_val(expr):
 
 #SOLVER OPTIONS
 solver = SolverFactory('gams')
-solver.options['solver'] = 'DICOPT'
+solver.options['solver'] = 'BARON'
 
 for a, current_weights in enumerate(weights):
     # Update mutable Params
