@@ -15,11 +15,13 @@ least=2 #min total groups
 
 # For Alexia to run
 inputGCs= r"C:\Users\Alexia\OneDrive - Imperial College London\AAYEAR4\APO1\GCs.xlsx"
-
 # For Julia to run
 #inputGCs= r"C:\Users\natur\Documents\AOBaddies\GCs.xlsx"
 
-#READING DATA
+# For new user : download the GCs.xlsx file and copy the absolute path below
+#inputGCs=r"paste path here"
+
+#READING DATA and Settings
 #Reading GCs from Excel sheets
 df = pd.read_excel(inputGCs, sheet_name="Groups")
 df.columns = df.columns.str.strip()   # Clean spaces
@@ -35,23 +37,6 @@ dfSVSH = pd.read_excel(inputGCs, sheet_name="SVSH", index_col=0)
 dfSVSH.columns = dfSVSH.columns.str.strip()
 dfSVSH.index = dfSVSH.index.str.strip()
 
-#IF NEEDED, making sure ni is in the correct format
-'''
-# Ensure ni limits fields exist or sensible defaults
-ni_lim_cols = ['nimax', 'nimin']
-for c in ni_lim_cols:
-    if c not in df.columns:
-        # If missing, create with defaults
-        if c == 'nimax':
-            df[c] = ni_max_default
-        else:
-            df[c] = 0
-
-# Coerce numeric
-df['nimax_num'] = pd.to_numeric(df['nimax'], errors='coerce').fillna(ni_max_default).astype(int)
-df['nimin_num'] = pd.to_numeric(df['nimin'], errors='coerce').fillna(0).astype(int)
-
-'''
 
 # Global max and Big-M calcs based on ni limits
 if specni:
@@ -69,7 +54,7 @@ M_groups_val = min(most, sum_nimax_total)
 
 ##BUILDING OUR MODEL
 
-#DEFINE SETS
+#DEFINING SETS
 model.g = Set(initialize=dfcp.index.unique().tolist()) #Groups and properties for GC Cp (Sahinidis et. al)
 A_props=['Tci', 'Pci', 'Tbi',  'A0i', 'B0i', 'C0i', 'D0i', 'ai'] #To calculate Cp from Sahinidis
 model.A=Set(initialize=A_props)
@@ -94,7 +79,7 @@ model.Ga = Set(initialize=[i for i, t in type_str_dict.items() if t == 'aromatic
 print("Ga groups:", ", ".join(sorted([str(i) for i in model.Ga])))
 model.Gc = Set(initialize=[i for i, t in type_str_dict.items() if t == 'cyclic'])
 
-#DEFINE PARAMETERS
+#DEFINING PARAMETERS
 if specni:
     nilim_data={(i, k): float(df.loc[i, k]) for i in df.index for k in ni_lim}
     model.nilim = Param(model.i, model.ni_lim, initialize=nilim_data, default=0)
@@ -139,16 +124,21 @@ for i in dfSVSH.index:
 model.ig = Param(model.i, model.g, initialize=ig_dict, default=0)
 
 #Constants
+#Reference Properties from Hukkerikar et al.
 model.Tb0 = Param(initialize=244.7889) #Kelvins
 model.Tm0 = Param(initialize=144.0977) #Kelvins
 model.Vm0 = Param(initialize=0.0123) #m^3/kmol
+
+# solubility data from Papadopoulos et al.
 model.R0 = Param(initialize=3.3) #MPa 1/2, based on experimental work 
 model.sigmacD=Param(initialize=15.7) #MPa 1/2, CO2 solubility data
 model.sigmacP=Param(initialize=5.2) #MPa 1/2
 model.sigmacH=Param(initialize=5.8) #MPa 1/2
+
+#From sahinidis et al.
 model.T_avg = Param(initialize=353) #in K, taken as average of absorption/desorption columns
 
-#Target oriented Scaling parameters
+#Target oriented Scaling parameters (extracted from litterature for MEA, see report)
 model.t_rho = Param(initialize=17.4108)     # MEA target for rho scaling
 model.t_Cp = Param(initialize=149.94)     # MEA target for Cp scaling
 model.t_RED = Param(initialize=3.546) ## MEA target for RED scaling
@@ -161,7 +151,7 @@ model.w_RED = Param(initialize=1.0, mutable=True)     # weight for RED
 model.w_rho = Param(initialize=1.0, mutable=True)     # weight for density-NEGATIVE BECAUSE WE WANT TO MAXIMIZE IT
 model.w_Cp  = Param(initialize=1.0, mutable=True)     # weight for heat capacity
 
-#----DEFINE VARIABLES---## Need to justify bound selection
+#DEFINING VARIABLES
 model.Tm=Var(within=NonNegativeReals, bounds=(0.01, 313), initialize=5) #in K
 model.Tb=Var(within=NonNegativeReals, bounds=(393, 3000), initialize=500) #in K
 model.rho=Var(within=NonNegativeReals, bounds=(0.0001, 50000)) #in mol.m^3
@@ -186,7 +176,7 @@ model.yc =Var(within=Binary)  # cyclic (non-aromatic) mode Param (initialize=0)
 model.ni = Var(model.i, within=NonNegativeIntegers, bounds=(0, global_nimax))
 model.ng = Var(model.g, within=NonNegativeReals, bounds=(0, None), initialize=1.0)#could leave continuous potench
 
-#Intermediate variables for calculating Cp, bounds copied from Sahinidis et. al where bounding doesn't result in infeasible
+#Intermediate variables for calculating Cp, bounds taken from Sahinidis et. al where bounding doesn't result in infeasible
 #Could eliminate by defining Cp but then can't bound
 model.T_b = Var(within=NonNegativeReals, initialize=350, bounds=(50, 1000)) #K
 model.T_c = Var(within=NonNegativeReals, initialize=500, bounds=(100, 2000)) #K
@@ -204,11 +194,7 @@ model.fX = Var(model.X, within=Reals)  #Tm, Tb, etc., Might be an issue that we 
 # Binary variable indicating whether attachment out of the aromatic ring is permitted
 model.z_attach_ok = Var(within=Binary)
 
-# Expressions for aromatic counts (should be in constraints but since not directly the constraint ok here)
-model.count_arom_vgt2 = Expression(expr=sum(model.ni[i] * model.is_vgt2_arom[i] for i in model.i))
-model.count_non_aromatic = Expression(expr=sum(model.ni[i] * (1 - model.is_arom[i]) for i in model.i))
-
-##DEFINE CONSTRAINTS
+##DEFINING CONSTRAINTS
 # (1) Property group contribution relationship
 def XGC_rule(model, X):
     return model.fX[X]==sum(model.ni[i] * model.ci[i, X] for i in model.i)
@@ -355,6 +341,11 @@ def cyclic_lower_only_if_cyclic_mode_rule(model):
 model.cyclic_only_if_cyclic_mode = Constraint(rule=cyclic_lower_only_if_cyclic_mode_rule)
 
 #11 Aromatic group with a valency of >2 only can bind to non-aromatic groups
+
+# Helper Expressions for aromatic counts
+model.count_arom_vgt2 = Expression(expr=sum(model.ni[i] * model.is_vgt2_arom[i] for i in model.i))
+model.count_non_aromatic = Expression(expr=sum(model.ni[i] * (1 - model.is_arom[i]) for i in model.i))
+
 def attach_ok_lower_rule(model):
     return model.count_arom_vgt2 >= model.z_attach_ok
 model.attach_ok_lower = Constraint(rule=attach_ok_lower_rule)
@@ -406,6 +397,7 @@ def objective_rule(model):
     )
 model.obj = Objective(rule=objective_rule, sense=minimize)
 
+#Setting up our weights loop
 weights = [[1, 1, 1], [0, 0, 1], [0, 1, 0], [1, 0, 0], [1, 1, 0]]
 
 summary_rows = []
