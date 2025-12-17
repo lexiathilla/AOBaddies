@@ -101,7 +101,7 @@ if specni:
     model.nilim.display()
 
 #GC for each Sahinidis group considered and each property (g,A)
-g_data = {}
+g_data = {} 
 for g in dfcp.index:
     for A in A_props:
         g_data[(g, A)] = float(dfcp.loc[g, A])
@@ -112,7 +112,7 @@ i_data = {}
 for i in df.index:
     for X in X_props:
         i_data[(i, X)] = float(df.loc[i, X])
-model.ci = Param(model.i, model.X, initialize=i_data, default=0)
+model.ci = Param(model.i, model.X, initialize=i_data, default=0) 
 
 #Valency data (defined for i groups)
 valency_dict = df['Valency 1'].to_dict()
@@ -184,7 +184,7 @@ model.yc =Var(within=Binary)  # cyclic (non-aromatic) mode Param (initialize=0)
 
 #Integer counts (relaxed but integral via binary expansion)
 model.ni = Var(model.i, within=NonNegativeIntegers, bounds=(0, global_nimax))
-model.ng = Var(model.g, within=NonNegativeIntegers, bounds=(0, None), initialize=1.0)
+model.ng = Var(model.g, within=NonNegativeReals, bounds=(0, None), initialize=1.0)#could leave continuous potench
 
 #Intermediate variables for calculating Cp, bounds copied from Sahinidis et. al where bounding doesn't result in infeasible
 #Could eliminate by defining Cp but then can't bound
