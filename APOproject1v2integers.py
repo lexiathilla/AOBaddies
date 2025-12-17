@@ -318,8 +318,8 @@ def m_rule(model):
 model.m_rule = Constraint(rule=m_rule)
 
 #(9) Expressing ni as an integer variables with linear expressions - NOT USED ATM
-def ni_rule(model,i):
-    return model.ni[i] == sum(2**(k-1)*model.yi[i,k] for k in model.Ki)
+#def ni_rule(model,i):
+#    return model.ni[i] == sum(2**(k-1)*model.yi[i,k] for k in model.Ki)
 #model.ni_rule = Constraint(model.i,rule=ni_rule)
 
 #(11) Octet Rule, i compounds
@@ -333,16 +333,24 @@ def monocyclic_mode_selection_rule(model):
     return model.ya + model.yc == model.yb['monocyclic']
 model.monocyclic_mode_selection = Constraint(rule=monocyclic_mode_selection_rule)
 
-#(13) Aromatic constraints
+#(13) Aromatic & cyclic constraints
 # Exactly 6 aromatic groups if aromatic mode; 0 aromatic groups otherwise -- SHOULD BE 5 OR 6
 def aromatic_ring_rule(model):
     return sum(model.ni[i] for i in model.Ga) == 6 * model.ya
 model.aromatic_ring = Constraint(rule=aromatic_ring_rule)
 
-# Forbid cyclic groups unless cyclic mode is chosen (Big-M)
+# Forbid cyclic groups unless cyclic mode is chosen (Big-M)- Check If getting rid of this still work
 def cyclic_only_if_cyclic_mode_rule(model):
     return sum(model.ni[i] for i in model.Gc) <= model.M_groups * model.yc
-model.cyclic_only_if_cyclic_mode = Constraint(rule=cyclic_only_if_cyclic_mode_rule)
+#model.cyclic_only_if_cyclic_mode = Constraint(rule=cyclic_only_if_cyclic_mode_rule)
+
+def cyclic_upper_only_if_cyclic_mode_rule(model):
+    return sum(model.ni[i] for i in model.Gc) <= 8 * model.yc
+model.cyclic_only_if_cyclic_mode = Constraint(rule=cyclic_upper_only_if_cyclic_mode_rule)
+
+def cyclic_lower_only_if_cyclic_mode_rule(model):
+    return sum(model.ni[i] for i in model.Gc) >= 5 * model.yc
+model.cyclic_only_if_cyclic_mode = Constraint(rule=cyclic_lower_only_if_cyclic_mode_rule)
 
 #(14) Aromatic group with a valency of >2 only can bind to non-aromatic groups
 def attach_ok_lower_rule(model):
