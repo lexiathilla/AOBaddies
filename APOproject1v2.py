@@ -53,8 +53,8 @@ type_str_dict = df[TYPE_COL].to_dict()
 model.Ga = Set(initialize=[i for i, t in type_str_dict.items() if t == 'aromatic'])
 print("Ga groups:", ", ".join(sorted([str(i) for i in model.Ga])))
 model.Gc = Set(initialize=[i for i, t in type_str_dict.items() if t == 'cyclic'])
-model.Ggen = Set(initialize=[i for i, t in type_str_dict.items() if t == 'general'])
-model.Ggunsat = Set(initialize=[i for i, t in type_str_dict.items() if t == 'unsat'])
+# model.Ggen = Set(initialize=[i for i, t in type_str_dict.items() if t == 'general'])
+# model.Ggunsat = Set(initialize=[i for i, t in type_str_dict.items() if t == 'unsat'])
 
 #----DEFINE PARAMETERS----
 #GC for each Sahinidis group considered and each property (g,A)
@@ -160,7 +160,7 @@ model.W = Var(within=Reals, initialize=0.3, bounds=(-1, 1.3)) # N/A
 model.Cp0 = Var(within=NonNegativeReals, initialize=1) #cal/mol*K (converted so Cp is in J/mol*K)
 
 #Properties results
-model.Cp = Var(within=NonNegativeReals, bounds=(1, 1000)) #J/mol*K
+model.Cp = Var(within=NonNegativeReals, bounds=(10e-6, 1000)) #J/mol*K
 model.fX = Var(model.X, within=Reals)  #Tm, Tb, etc.
 
 # Big-M for aromatic bonding
@@ -266,7 +266,7 @@ def link_properties_rule(model, X):
         return Constraint.Skip
 model.link_properties = Constraint(model.X, rule=link_properties_rule)
 
-# (5) Definition of density from GCS calculated parameters
+# (5) Definition of density from GC calculated parameters
 def rho_def_rule(model):
     return model.rho * model.molarvol == 1 
 model.rho_def = Constraint(rule=rho_def_rule)
@@ -352,7 +352,7 @@ def monocyclic_mode_selection_rule(model):
 model.monocyclic_mode_selection = Constraint(rule=monocyclic_mode_selection_rule)
 
 #(13) Aromaticity constratints
-# Exactly 6 aromatic groups if aromatic mode; 0 aromatic groups otherwise
+# Exactly 6 aromatic groups if aromatic mode; 0 aromatic groups otherwise -- SHOULD BE 5 OR 6
 def aromatic_ring_rule(model):
     return sum(model.ni[i] for i in model.Ga) == 6 * model.ya
 model.aromatic_ring = Constraint(rule=aromatic_ring_rule)
@@ -391,7 +391,7 @@ def maxgroups(model):
     return sum(model.ni[k] for k in model.i)<=25
 model.max_rule = Constraint(rule=maxgroups)    
 
-#(18) Minimum of 5 cyclic groups if cyclic non-aromatic mode
+#(18) Minimum cyclic groups if cyclic non-aromatic mode
 def min_cyclic_groups_rule(model):
     return sum(model.ni[i] for i in model.Gc) >= 5 * model.yc
 model.min_cyclic_groups = Constraint(rule=min_cyclic_groups_rule)
@@ -423,82 +423,91 @@ def objective_rule(model):
     )
 model.obj = Objective(rule=objective_rule, sense=minimize)
 
-#----SOLVE----#
-solver = SolverFactory('gams')
-solver.options['solver'] = 'DICOPT'
-results = solver.solve(model, tee=True)
+weights = [[1, 1, 1], [0, 0, 1], [0, 1, 0], [1, 0, 0], [1, 1, 0]]
 
-#----DISPLAY RESULTS----#
-print("\n" + "="*70)
-print("OPTIMAL SOLUTION FOR CARBON CAPTURE SOLVENT DESIGN")
-print("="*70)
+for a in range(len(weights)):
+    current_weights = weights[a]
+    model.w_RED = Param(within=Reals,initialize=current_weights[0])     # weight for RED
+    model.w_rho = Param(within=Reals,initialize=current_weights[1])     # weight for density-NEGATIVE BECAUSE WE WANT TO MAXIMIZE IT
+    model.w_Cp  = Param(within=Reals,initialize=current_weights[2])     # weight for heat capacity
 
-print("\nGroup Counts (ni) - Hukkerikar Groups:")
-print("-" * 70)
-for i in model.i:
-    if model.ni[i].value and model.ni[i].value > 0.01:
-        print(f"  {i:25s}: {model.ni[i].value:6.3f}")
+    #----SOLVE----#
+    solver = SolverFactory('gams')
+    solver.options['solver'] = 'DICOPT'
+    results = solver.solve(model, tee=False)
 
-print("\nSecondary Group Counts (ng) - Sahinidis Groups:")
-print("-" * 70)
-for g in model.g:
-    if model.ng[g].value and model.ng[g].value > 0.01:
-        print(f"  {g:25s}: {model.ng[g].value:6.3f}")
+    #----DISPLAY RESULTS----#
+    print("\n" + "="*70)
+    print("OPTIMAL SOLUTION FOR CARBON CAPTURE SOLVENT DESIGN")
+    print("="*70)
+    print(current_weights)
 
-print("\nMolecule Type:")
-print("-" * 70)
-for b in model.B:
-    if model.yb[b].value and model.yb[b].value > 0.5:
-        print(f"  Type: {b}")
-        print(f"  m parameter: {model.m.value:.3f}")
+    print("\nGroup Counts (ni) - Hukkerikar Groups:")
+    print("-" * 70)
+    for i in model.i:
+        if model.ni[i].value and model.ni[i].value > 0.01:
+            print(f"  {i:25s}: {model.ni[i].value:6.3f}")
 
-if model.ya.value and model.ya.value > 0.5:
-    print("  Cyclic Mode: Aromatic")
-if model.yc.value and model.yc.value > 0.5:
-    print("  Cyclic Mode: Non-aromatic cyclic")
+    print("\nSecondary Group Counts (ng) - Sahinidis Groups:")
+    print("-" * 70)
+    for g in model.g:
+        if model.ng[g].value and model.ng[g].value > 0.01:
+            print(f"  {g:25s}: {model.ng[g].value:6.3f}")
 
-print("\nTarget Properties:")
-print("-" * 70)
-print(f"  Heat Capacity (Cp):        {model.Cp.value:.6f} J/(mol·K)")
-print(f"  Density (rho):             {model.rho.value:.6f} mol/m³")
-print(f"  RED (Solubility):          {model.RED.value:.6f}")
-print(f"  Melting Point (Tm):        {model.Tm.value:.3f} K ({model.Tm.value - 273.15:.2f} °C)")
-print(f"  Boiling Point (Tb):        {model.Tb.value:.3f} K ({model.Tb.value - 273.15:.2f} °C)")
-print(f"  Molar Volume:              {model.molarvol.value:.4f} m³/kmol")
+    print("\nMolecule Type:")
+    print("-" * 70)
+    for b in model.B:
+        if model.yb[b].value and model.yb[b].value > 0.5:
+            print(f"  Type: {b}")
+            print(f"  m parameter: {model.m.value:.3f}")
 
-print("\nIntermediate Cp Calculation Values:")
-print("-" * 70)
-if model.T_b.value:
-    print(f"  Boiling Temperature (T_b): {model.T_b.value:.2f} K")
-if model.T_c.value:
-    print(f"  Critical Temperature:      {model.T_c.value:.2f} K")
-if model.P_c.value:
-    print(f"  Critical Pressure:         {model.P_c.value:.4f} bar")
-if model.T_avgr.value:
-    print(f"  Reduced Avg Temperature:   {model.T_avgr.value:.4f}")
-if model.alpha.value:
-    print(f"  Alpha:         {model.alpha.value:.4f} ")
-if model.beta.value:
-    print(f"  Beta:         {model.beta.value:.4f}")
-if model.W.value:
-    print(f"  Acentric Factor (W):       {model.W.value:.4f}")
-if model.Cp0.value:
-    print(f"  Ideal Cp0:                 {model.Cp0.value:.6f} cal/(mol·K)")
+    if model.ya.value and model.ya.value > 0.5:
+        print("  Cyclic Mode: Aromatic")
+    if model.yc.value and model.yc.value > 0.5:
+        print("  Cyclic Mode: Non-aromatic cyclic")
 
-print("\nSolubility Parameters:")
-print("-" * 70)
-print(f"  δD (Dispersion):           {model.sol1.value:.4f} MPa^0.5")
-print(f"  δP (Polar):                {model.sol2.value:.4f} MPa^0.5")
-print(f"  δH (Hydrogen bonding):     {model.sol3.value:.4f} MPa^0.5")
+    print("\nTarget Properties:")
+    print("-" * 70)
+    print(f"  Heat Capacity (Cp):        {model.Cp.value:.6f} J/(mol·K)")
+    print(f"  Density (rho):             {model.rho.value:.6f} mol/m³")
+    print(f"  RED (Solubility):          {model.RED.value:.6f}")
+    print(f"  Melting Point (Tm):        {model.Tm.value:.3f} K ({model.Tm.value - 273.15:.2f} °C)")
+    print(f"  Boiling Point (Tb):        {model.Tb.value:.3f} K ({model.Tb.value - 273.15:.2f} °C)")
+    print(f"  Molar Volume:              {model.molarvol.value:.4f} m³/kmol")
 
-print("\nObjective Function Components:")
-print("-" * 70)
-print(f"  RED normalized:            {model.RED_norm():.6f}")
-print(f"  Density normalized:        {model.rho_norm():.6f}")
-print(f"  Cp normalized:             {model.Cp_norm():.6f}")
-print(f"  Total Objective Value:     {model.obj():.6f}")
+    # print("\nIntermediate Cp Calculation Values:")
+    # print("-" * 70)
+    # if model.T_b.value:
+    #     print(f"  Boiling Temperature (T_b): {model.T_b.value:.2f} K")
+    # if model.T_c.value:
+    #     print(f"  Critical Temperature:      {model.T_c.value:.2f} K")
+    # if model.P_c.value:
+    #     print(f"  Critical Pressure:         {model.P_c.value:.4f} bar")
+    # if model.T_avgr.value:
+    #     print(f"  Reduced Avg Temperature:   {model.T_avgr.value:.4f}")
+    # if model.alpha.value:
+    #     print(f"  Alpha:         {model.alpha.value:.4f} ")
+    # if model.beta.value:
+    #     print(f"  Beta:         {model.beta.value:.4f}")
+    # if model.W.value:
+    #     print(f"  Acentric Factor (W):       {model.W.value:.4f}")
+    # if model.Cp0.value:
+    #     print(f"  Ideal Cp0:                 {model.Cp0.value:.6f} cal/(mol·K)")
 
-print("\n" + "="*70)
-print("Solver Status:", results.solver.status)
-print("Termination Condition:", results.solver.termination_condition)
-print("="*70)
+    # print("\nSolubility Parameters:")
+    # print("-" * 70)
+    # print(f"  δD (Dispersion):           {model.sol1.value:.4f} MPa^0.5")
+    # print(f"  δP (Polar):                {model.sol2.value:.4f} MPa^0.5")
+    # print(f"  δH (Hydrogen bonding):     {model.sol3.value:.4f} MPa^0.5")
+
+    # print("\nObjective Function Components:")
+    # print("-" * 70)
+    # print(f"  RED normalized:            {model.RED_norm():.6f}")
+    # print(f"  Density normalized:        {model.rho_norm():.6f}")
+    # print(f"  Cp normalized:             {model.Cp_norm():.6f}")
+    # print(f"  Total Objective Value:     {model.obj():.6f}")
+
+    # print("\n" + "="*70)
+    # print("Solver Status:", results.solver.status)
+    # print("Termination Condition:", results.solver.termination_condition)
+    # print("="*70)
