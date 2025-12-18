@@ -17,7 +17,7 @@ least=2 #min total groups
 # inputGCs= r"C:\Users\Alexia\OneDrive - Imperial College London\AAYEAR4\APO1\GCs.xlsx"
 
 # For Julia to run
-inputGCs= r"C:\Users\natur\Downloads\GCs (4).xlsx"
+inputGCs= r"C:\Users\natur\Documents\AOBaddies\GCs.xlsx"
 
 #READING DATA
 #Reading GCs from Excel sheets
