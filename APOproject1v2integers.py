@@ -14,10 +14,10 @@ most=25 #max total groups
 least=2 #min total groups
 
 # For Alexia to run
-# inputGCs= r"C:\Users\Alexia\OneDrive - Imperial College London\AAYEAR4\APO1\GCs.xlsx"
+# putGCs= r"C:\Users\Alexia\OneDrive - Imperial College London\AAYEAR4\APO1\GCs.xlsx"
 
 # For Julia to run
-inputGCs= r"C:\Users\natur\Downloads\GCs (4).xlsx"
+inputGCs= r"C:\Users\natur\Documents\AOBaddies\GCs.xlsx"
 
 #READING DATA
 #Reading GCs from Excel sheets
@@ -125,14 +125,8 @@ model.M_groups = Param(initialize=M_groups_val)
 is_arom_dict = {i: 1 if i in list(model.Ga) else 0 for i in model.i}
 model.is_arom = Param(model.i, initialize=is_arom_dict, default=0)
 
-is_cyc_dict = {i: 1 if i in list(model.Gc) else 0 for i in model.i}
-model.is_cyc = Param(model.i, initialize=is_cyc_dict, default=0)
-
 is_vgt2_arom_dict = {i: 1 if (i in list(model.Ga) and int(valency_dict.get(i, 0)) > 2) else 0 for i in model.i}
 model.is_vgt2_arom = Param(model.i, initialize=is_vgt2_arom_dict, default=0)
-
-is_vgt2_cyc_dict = {i: 1 if (i in list(model.Gc) and int(valency_dict.get(i, 0)) > 2) else 0 for i in model.i}
-model.is_vgt2_cyc = Param(model.i, initialize=is_vgt2_cyc_dict, default=0)
 
 #Mapping g groups to i groups - defined manually
 ig_dict = {}
@@ -212,9 +206,7 @@ model.z_attach_ok = Var(within=Binary)
 
 # Expressions for aromatic counts (should be in constraints but since not directly the constraint ok here)
 model.count_arom_vgt2 = Expression(expr=sum(model.ni[i] * model.is_vgt2_arom[i] for i in model.i))
-model.count_cyc_vgt2 = Expression(expr=sum(model.ni[i] * model.is_vgt2_cyc[i] for i in model.i))
 model.count_non_aromatic = Expression(expr=sum(model.ni[i] * (1 - model.is_arom[i]) for i in model.i))
-model.count_non_cyc = Expression(expr=sum(model.ni[i] * (1 - model.is_cyc[i]) for i in model.i))
 
 ##DEFINE CONSTRAINTS
 # (1) Property group contribution relationship
@@ -352,7 +344,7 @@ def cyclic_only_if_cyclic_mode_rule(model):
     return sum(model.ni[i] for i in model.Gc) <= model.M_groups * model.yc
 model.cyclic_only_if_cyclic_mode = Constraint(rule=cyclic_only_if_cyclic_mode_rule)
 
-#(14) Aromatic group with a valency of >2 only can bind to non-aromatic groups - same for cyclic
+#(14) Aromatic group with a valency of >2 only can bind to non-aromatic groups
 def attach_ok_lower_rule(model):
     return model.count_arom_vgt2 >= model.z_attach_ok
 model.attach_ok_lower = Constraint(rule=attach_ok_lower_rule)
@@ -361,21 +353,9 @@ def attach_ok_upper_rule(model):
     return model.count_arom_vgt2 <= model.M_groups * model.z_attach_ok
 model.attach_ok_upper = Constraint(rule=attach_ok_upper_rule)
 
-def attach_ok_lr_rule(model):
-    return model.count_cyc_vgt2 >= model.z_attach_ok
-model.attach_ok_lr = Constraint(rule=attach_ok_lr_rule)
-
-def attach_ok_ur_rule(model):
-    return model.count_cyc_vgt2 <= model.M_groups * model.z_attach_ok
-model.attach_ok_ur = Constraint(rule=attach_ok_ur_rule)
-
 def non_aromatic_allowed_in_aromatic_mode_rule(model):
     return model.count_non_aromatic <= model.M_groups * (1 - model.ya) + model.M_groups * model.z_attach_ok
 model.non_aromatic_allowed_in_aromatic_mode = Constraint(rule=non_aromatic_allowed_in_aromatic_mode_rule)
-
-def non_cyc_allowed_in_cyc_mode_rule(model):
-    return model.count_non_cyc <= model.M_groups * (1 - model.yc) + model.M_groups * model.z_attach_ok
-model.non_cyc_allowed_in_cyc_mode = Constraint(rule=non_cyc_allowed_in_cyc_mode_rule)
 
 #(15) Bonding rule 
 def bi_rule(model, i):
@@ -426,7 +406,7 @@ def objective_rule(model):
     )
 model.obj = Objective(rule=objective_rule, sense=minimize)
 
-weights = [[1/3, 1/3, 1/3], [0, 0, 1], [0, 1, 0], [1, 0, 0], [0.5, 0.5, 0], [0, 0.5, 0.5], [0.5, 0, 0.5]]
+weights = [[1, 1, 1], [0, 0, 1], [0, 1, 0], [1, 0, 0], [1, 1, 0]]
 
 summary_rows = []
 ni_rows = []
@@ -496,8 +476,8 @@ for a, current_weights in enumerate(weights):
     model.w_rho.set_value(current_weights[1])
     model.w_Cp.set_value(current_weights[2])
 
-    # Solve and print solver outputs
-    results = solver.solve(model, tee=True)
+    # Solve
+    results = solver.solve(model, tee=False)
 
     # Solver/termination info
     solver_status = results.solver.status if hasattr(results, 'solver') else None
