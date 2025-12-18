@@ -107,11 +107,19 @@ model.vi = Param(model.i, initialize=valency_dict, default=0)
 model.M_groups = Param(initialize=M_groups_val)
 
 # Indicator Params (0/1) for membership and valency > 2
+#aromatic groups
 is_arom_dict = {i: 1 if i in list(model.Ga) else 0 for i in model.i}
 model.is_arom = Param(model.i, initialize=is_arom_dict, default=0)
 
 is_vgt2_arom_dict = {i: 1 if (i in list(model.Ga) and int(valency_dict.get(i, 0)) > 2) else 0 for i in model.i}
 model.is_vgt2_arom = Param(model.i, initialize=is_vgt2_arom_dict, default=0)
+
+#cyclic groups
+is_cyc_dict = {i: 1 if i in list(model.Gc) else 0 for i in model.i}
+model.is_cyc = Param(model.i, initialize=is_cyc_dict, default=0)
+
+is_vgt2_cyc_dict = {i: 1 if (i in list(model.Gc) and int(valency_dict.get(i, 0)) > 2) else 0 for i in model.i}
+model.is_vgt2_cyc = Param(model.i, initialize=is_vgt2_cyc_dict, default=0)
 
 #Mapping g groups to i groups - defined manually
 ig_dict = {}
@@ -191,7 +199,7 @@ model.Cp0 = Var(within=NonNegativeReals, initialize=1) #cal/mol*K (converted so 
 model.Cp = Var(within=NonNegativeReals, bounds=(10e-6, 1000)) #J/mol*K
 model.fX = Var(model.X, within=Reals)  #Tm, Tb, etc., Might be an issue that we can't/haven't initialized them independently
 
-# Binary variable indicating whether attachment out of the aromatic ring is permitted
+# Binary variable indicating whether attachment out of the aromatic ring or cyclic ring is permitted (can use one as cyclic and aromatic groups are not allowed at the same time)
 model.z_attach_ok = Var(within=Binary)
 
 ##DEFINING CONSTRAINTS
@@ -205,7 +213,8 @@ def numgini_rule(model,g):#either we define specific exceptions to take into acc
     return model.ng[g]==sum(model.ni[i] * model.ig[i,g] for i in model.i)
 model.numgini = Constraint(model.g, rule=numgini_rule)
 
-# (3) Cp calculations from Sahinidis et al 
+# (3) 
+# 3.1 Cp calculations from Sahinidis et al 
 # Critical temperature/pressure, boiling temperature from set of g-groups in final molecule
 # Boiling temperature
 def Tb_calc_rule(model):
@@ -279,12 +288,12 @@ def link_properties_rule(model, X):
         return Constraint.Skip
 model.link_properties = Constraint(model.X, rule=link_properties_rule)
 
-# (5) Definition of density from GC calculated parameters
+# 3.2 Definition of density from GC calculated parameters
 def rho_def_rule(model):
     return model.rho * model.molarvol == 1 
 model.rho_def = Constraint(rule=rho_def_rule)
 
-#(6) Def of RED from GCS calc parameters
+# 3.3 Def of RED from GCS calc parameters
 def RED_def_rule(model):
     return model.RED * model.R0 == sqrt(
         4 * (model.sol1 - model.sigmacD)**2 +
@@ -293,18 +302,18 @@ def RED_def_rule(model):
     )
 model.RED_def = Constraint(rule=RED_def_rule)
 
-#(7) Mode Selection and ring/aromatic logic
-# 7.1 Allowing only one type of molecule (acyclic or monocyclic)
+#(5) Mode Selection and ring/aromatic logic
+# 5.1 Allowing only one type of molecule (acyclic or monocyclic)
 def one_type(model):
     return sum (model.yb[b] for b in model.B) ==1
 model.one_type = Constraint(rule=one_type)
 
-#7.2 Relating m to molecule types:
+#5.2 Relating m to molecule types:
 def m_rule(model):
     return model.m == 1-model.yb['monocyclic']
 model.m_rule = Constraint(rule=m_rule)
 
-#(8) Octet Rule, i compounds
+#(6) Octet Rule, i compounds
 def vi_rule(model):
     return 2*model.m==sum((2-model.vi[i])*model.ni[i] for i in model.i)
 model.vi_rule = Constraint(rule=vi_rule)
@@ -314,38 +323,43 @@ model.vi_rule = Constraint(rule=vi_rule)
 #    return model.ni[i] == sum(2**(k-1)*model.yi[i,k] for k in model.Ki)
 #model.ni_rule = Constraint(model.i,rule=ni_rule)
 
-#(9) Bonding rule
+#(7) Bonding rule
 def bi_rule(model, i):
     return model.ni[i]*(model.vi[i]-1)+2-sum(model.ni[u] for u in model.i)<=0 
 model.bi_rule = Constraint(model.i, rule=bi_rule)
 
-#(10) Cyclic and aromatic logic
-# 10.1 Exactly one mode if monocyclic, none if acyclic
+#(8) Cyclic and aromatic logic
+# 8.1 Exactly one mode if monocyclic, none if acyclic
 def monocyclic_mode_selection_rule(model):
     return model.ya + model.yc == model.yb['monocyclic']
 model.monocyclic_mode_selection = Constraint(rule=monocyclic_mode_selection_rule)
 
-# 10.2 Exactly 6 aromatic groups if aromatic mode; 0 aromatic groups otherwise -- SHOULD BE 5 OR 6
+# 8.2 Exactly 6 aromatic groups if aromatic mode; 0 aromatic groups otherwise -- SHOULD BE 5 OR 6
 def aromatic_ring_rule(model):
     return sum(model.ni[i] for i in model.Ga) == 6 * model.ya
 model.aromatic_ring = Constraint(rule=aromatic_ring_rule)
 
-# 10.3 Forbid cyclic groups unless cyclic mode is chosen : upper limit
+# 8.3 Forbid cyclic groups unless cyclic mode is chosen : upper limit
 def cyclic_upper_only_if_cyclic_mode_rule(model):
     return sum(model.ni[i] for i in model.Gc) <= 8 * model.yc
-model.cyclic_only_if_cyclic_mode = Constraint(rule=cyclic_upper_only_if_cyclic_mode_rule)
+model.cyclic_only_if_cyclic_mode_upper = Constraint(rule=cyclic_upper_only_if_cyclic_mode_rule)
 
-# 10.4 Forbid cyclic groups unless cyclic mode is chosen : lower limit
+# 8.4 Forbid cyclic groups unless cyclic mode is chosen : lower limit
 def cyclic_lower_only_if_cyclic_mode_rule(model):
     return sum(model.ni[i] for i in model.Gc) >= 5 * model.yc
-model.cyclic_only_if_cyclic_mode = Constraint(rule=cyclic_lower_only_if_cyclic_mode_rule)
+model.cyclic_only_if_cyclic_mode_lower = Constraint(rule=cyclic_lower_only_if_cyclic_mode_rule)
 
-#11 Aromatic group with a valency of >2 only can bind to non-aromatic groups
+#9 Aromatic group with a valency of >2 only can bind to non-aromatic groups
 
 # Helper Expressions for aromatic counts
 model.count_arom_vgt2 = Expression(expr=sum(model.ni[i] * model.is_vgt2_arom[i] for i in model.i))
 model.count_non_aromatic = Expression(expr=sum(model.ni[i] * (1 - model.is_arom[i]) for i in model.i))
 
+# Helper Expressions for cyclic counts
+model.count_cyc_vgt2 = Expression(expr=sum(model.ni[i] * model.is_vgt2_cyc[i] for i in model.i))
+model.count_non_cyc = Expression(expr=sum(model.ni[i] * (1 - model.is_cyc[i]) for i in model.i))
+
+#Aromatic group with a valency of >2 only can bind to non-aromatic groups 
 def attach_ok_lower_rule(model):
     return model.count_arom_vgt2 >= model.z_attach_ok
 model.attach_ok_lower = Constraint(rule=attach_ok_lower_rule)
@@ -358,18 +372,31 @@ def non_aromatic_allowed_in_aromatic_mode_rule(model):
     return model.count_non_aromatic <= model.M_groups * (1 - model.ya) + model.M_groups * model.z_attach_ok
 model.non_aromatic_allowed_in_aromatic_mode = Constraint(rule=non_aromatic_allowed_in_aromatic_mode_rule)
 
-#12 Min and max size of molecule (in terms of number of groups - could be nice to do in terms of number of atoms)
-# 12.1 Minimum number of groups
+#similarily, cyclic group with a valency of >2 only can bind to non-cyclic groups 
+def attach_ok_lr_rule(model):
+    return model.count_cyc_vgt2 >= model.z_attach_ok
+model.attach_ok_lr = Constraint(rule=attach_ok_lr_rule)
+
+def attach_ok_ur_rule(model):
+    return model.count_cyc_vgt2 <= model.M_groups * model.z_attach_ok
+model.attach_ok_ur = Constraint(rule=attach_ok_ur_rule)
+
+def non_cyc_allowed_in_cyc_mode_rule(model):
+    return model.count_non_cyc <= model.M_groups * (1 - model.yc) + model.M_groups * model.z_attach_ok
+model.non_cyc_allowed_in_cyc_mode = Constraint(rule=non_cyc_allowed_in_cyc_mode_rule)
+
+#10 Min and max size of molecule (in terms of number of groups - could be nice to do in terms of number of atoms)
+# 10.1 Minimum number of groups
 def zer(model):
     return sum(model.ni[k] for k in model.i)>=least
 model.zer_rule = Constraint(rule=zer)    
 
-# 12.2 Maximum number of groups
+# 10.2 Maximum number of groups
 def maxgroups(model):
     return sum(model.ni[k] for k in model.i)<=most
 model.max_rule = Constraint(rule=maxgroups)    
 
-#13 Min and max ni constraints
+#11 Min and max ni constraints
 if specni:
         print("adding nimin/max constraints")
         def minmaxni_rule(model, i, k):
@@ -398,7 +425,8 @@ def objective_rule(model):
 model.obj = Objective(rule=objective_rule, sense=minimize)
 
 #Setting up our weights loop
-weights = [[1, 1, 1], [0, 0, 1], [0, 1, 0], [1, 0, 0], [1, 1, 0]]
+#weights = [[1, 1, 1], [0, 0, 1], [0, 1, 0], [1, 0, 0], [1, 1, 0]]
+weights = [[1/3, 1/3, 1/3], [0, 0, 1], [0, 1, 0], [1, 0, 0], [0.5, 0.5, 0], [0, 0.5, 0.5], [0.5, 0, 0.5]]
 
 summary_rows = []
 ni_rows = []
